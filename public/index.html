@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Raw Supabase Google Sign Up Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-900 flex items-center justify-center min-h-screen p-4 text-white">
+
+  <div class="bg-slate-800 p-8 rounded-2xl border border-slate-700 w-full max-w-md shadow-2xl">
+    <!-- Status Header -->
+    <div class="text-center mb-6">
+      <h1 class="text-xl font-bold">Google Auth Debugger</h1>
+      <p id="status" class="text-xs text-slate-400 mt-2 bg-slate-950 p-2 rounded-sm font-mono break-all">Initializing...</p>
+    </div>
+
+    <!-- State 1: Logged Out (Explicit Sign Up Button) -->
+    <div id="logged-out-view" class="hidden">
+      <button onclick="signUpWithGoogle()" class="w-full flex items-center justify-center gap-3 bg-white text-slate-900 font-bold py-3 px-4 rounded-xl hover:bg-slate-100 transition cursor-pointer shadow-md">
+        Sign up with Google
+      </button>
+    </div>
+
+    <!-- State 2: Logged In -->
+    <div id="logged-in-view" class="hidden space-y-4">
+      <div class="bg-slate-950 p-3 rounded-lg border border-slate-700">
+        <span class="text-xs text-emerald-400 font-bold uppercase block mb-1">Active User Session:</span>
+        <pre id="raw-user-json" class="text-[10px] font-mono overflow-x-auto max-h-40 text-slate-300"></pre>
+      </div>
+
+      <button onclick="signOut()" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition cursor-pointer">
+        Sign Out
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://vixrjkcyrlbwxgegihcm.supabase.co";
+    const SUPABASE_ANON_KEY = "Sb_publishable_k4gygyuumSWF1k50bYxzlA_ns1iY3lQ";
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Check for raw errors handed back in the URL hash on page load
+    async function checkRawInitialSession() {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) {
+        document.getElementById('status').innerText = "Session Error Detected";
+        alert("RAW INITIAL SESSION ERROR:\n" + JSON.stringify(error, null, 2));
+        console.error("Raw Session Error Object:", error);
+      }
+    }
+    checkRawInitialSession();
+
+    // Toggle views based on session state
+    supabase.auth.onAuthStateChange((event, session) => {
+      document.getElementById('status').innerText = `Current Auth Event: ${event}`;
+      
+      if (session) {
+        document.getElementById('logged-out-view').classList.add('hidden');
+        document.getElementById('logged-in-view').classList.remove('hidden');
+        document.getElementById('raw-user-json').innerText = JSON.stringify(session.user, null, 2);
+      } else {
+        document.getElementById('logged-in-view').classList.add('hidden');
+        document.getElementById('logged-out-view').classList.remove('hidden');
+      }
+    });
+
+    // Sign Up function with forced account chooser
+    async function signUpWithGoogle() {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.href,
+          // This object tells Google to ignore previous logins and display the list of accounts
+          queryParams: {
+            prompt: 'select_account'
+          }
+        }
+      });
+      
+      if (error) {
+        alert("RAW OAUTH INITIALIZATION ERROR:\n" + JSON.stringify(error, null, 2));
+        console.error("Raw OAuth Error Object:", error);
+      }
+    }
+
+    // Sign Out
+    async function signOut() {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        alert("RAW LOGOUT ERROR:\n" + JSON.stringify(error, null, 2));
+        console.error("Raw Logout Error Object:", error);
+      }
+    }
+  </script>
+</body>
+</html>
