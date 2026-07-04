@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Google Sign In</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-900 flex items-center justify-center min-h-screen p-4 text-white">
+
+  <div class="bg-slate-800 p-8 rounded-2xl border border-slate-700 w-full max-w-md shadow-2xl space-y-4">
+    <div class="text-center">
+      <h1 class="text-xl font-bold">Google Auth</h1>
+      <p id="status" class="text-xs text-slate-400 mt-2 bg-slate-950 p-2 rounded-sm font-mono break-all">
+        Ready
+      </p>
+    </div>
+
+    <button
+      onclick="signInWithGoogle()"
+      class="w-full flex items-center justify-center gap-3 bg-white text-slate-900 font-bold py-3 px-4 rounded-xl hover:bg-slate-100 transition cursor-pointer shadow-md"
+    >
+      Continue with Google
+    </button>
+
+    <div id="error-box" class="hidden bg-rose-950 border border-rose-700 text-rose-200 text-sm p-3 rounded-xl">
+      <strong class="block mb-1">Error</strong>
+      <pre id="error-text" class="whitespace-pre-wrap break-all text-xs font-mono"></pre>
+    </div>
+
+    <div id="user-box" class="hidden bg-slate-950 border border-slate-700 p-3 rounded-xl">
+      <h2 class="text-sm font-bold text-emerald-400 mb-2">User Data</h2>
+      <pre id="user-json" class="text-[11px] font-mono overflow-x-auto whitespace-pre-wrap break-all text-slate-300"></pre>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://vixrjkcyrlbwxgegihcm.supabase.co";
+    const SUPABASE_ANON_KEY = "Sb_publishable_k4gygyuumSWF1k50bYxzlA_ns1iY3lQ";
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    function showStatus(text) {
+      document.getElementById("status").innerText = text;
+    }
+
+    function showError(err) {
+      const box = document.getElementById("error-box");
+      const text = document.getElementById("error-text");
+      box.classList.remove("hidden");
+      text.innerText = typeof err === "string" ? err : JSON.stringify(err, null, 2);
+      console.error(err);
+    }
+
+    function clearError() {
+      document.getElementById("error-box").classList.add("hidden");
+      document.getElementById("error-text").innerText = "";
+    }
+
+    function showUser(user) {
+      const box = document.getElementById("user-box");
+      const pre = document.getElementById("user-json");
+      box.classList.remove("hidden");
+      pre.innerText = JSON.stringify(user, null, 2);
+    }
+
+    function readOAuthErrorsFromUrl() {
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const query = new URLSearchParams(window.location.search);
+
+      const errorCode = hash.get("error_code") || query.get("error_code");
+      const errorDesc = hash.get("error_description") || query.get("error_description");
+      const providerError = hash.get("error") || query.get("error");
+
+      if (errorCode || errorDesc || providerError) {
+        showError({
+          error: providerError || null,
+          error_code: errorCode || null,
+          error_description: errorDesc || null
+        });
+      }
+    }
+
+    async function signInWithGoogle() {
+      clearError();
+      showStatus("Opening Google sign-in...");
+
+      const { error } = await supabaseClient.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: "https://me-khuzwayo.vercel.app",
+          queryParams: {
+            prompt: "select_account"
+          }
+        }
+      });
+
+      if (error) {
+        showStatus("OAuth error");
+        showError(error);
+      }
+    }
+
+    async function saveProfile(user) {
+      if (!user) return false;
+
+      const fullName =
+        user.user_metadata?.full_name ||
+        user.user_metadata?.name ||
+        user.user_metadata?.email ||
+        null;
+
+      const { data, error } = await supabaseClient
+        .from("profiles")
+        .upsert(
+          {
+            id: user.id,
+            full_name: fullName,
+            updated_at: new Date().toISOString()
+          },
+          { onConflict: "id" }
+        )
+        .select();
+
+      if (error) {
+        showStatus("Profile save failed");
+        showError(error);
+        return false;
+      }
+
+      return true;
+    }
+
+    async function handleSession() {
+      readOAuthErrorsFromUrl();
+
+      const { data, error } = await supabaseClient.auth.getSession();
+
+      if (error) {
+        showStatus("Session error");
+        showError(error);
+        return;
+      }
+
+      const session = data.session;
+
+      if (session?.user) {
+        sessionStorage.setItem("supabase_access_token", session.access_token);
+        showUser(session.user);
+
+        const saved = await saveProfile(session.user);
+        if (saved) {
+          showStatus("Signed in as " + (session.user.email || "user"));
+        }
+      } else {
+        showStatus("Not signed in");
+      }
+    }
+
+    handleSession();
+
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        sessionStorage.setItem("supabase_access_token", session.access_token);
+        showUser(session.user);
+
+        if (event === "SIGNED_IN" || event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") {
+          const saved = await saveProfile(session.user);
+          if (saved) {
+            showStatus("Signed in as " + (session.user.email || "user"));
+          }
+        }
+      } else {
+        showStatus("Not signed in");
+      }
+    });
+  </script>
+</body>
+  </html>
