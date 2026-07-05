@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Email Auth</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-900 flex items-center justify-center min-h-screen p-4">
+
+  <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md space-y-6">
+    <div class="text-center">
+      <h1 id="form-title" class="text-2xl font-bold text-slate-900">Sign In</h1>
+      <p id="status" class="text-sm text-slate-500 mt-1">Enter your credentials</p>
+    </div>
+
+    <!-- Inputs (Added id="auth-container" so it can be hidden after login) -->
+    <div id="auth-container" class="space-y-4">
+      <input type="email" id="email" placeholder="Email" class="w-full p-3 border border-slate-200 rounded-xl outline-hidden focus:border-slate-900">
+      <input type="password" id="password" placeholder="Password" class="w-full p-3 border border-slate-200 rounded-xl outline-hidden focus:border-slate-900">
+      
+      <button onclick="handleAuth()" id="auth-btn" class="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition cursor-pointer">
+        Sign In
+      </button>
+
+      <button onclick="toggleMode()" id="toggle-btn" class="w-full text-slate-500 text-sm hover:underline cursor-pointer">
+        Need an account? Sign Up
+      </button>
+    </div>
+
+    <!-- User View (Hidden by default) -->
+    <div id="user-box" class="hidden space-y-4 pt-6 border-t border-slate-100">
+      <p class="text-sm text-emerald-600 font-semibold text-center">Authenticated Successfully</p>
+      <button onclick="signOut()" class="w-full bg-rose-50 text-rose-600 hover:bg-rose-100 font-semibold py-2 rounded-xl transition cursor-pointer">Sign Out</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    // Inserted your exact credentials
+    const supabase = createClient(
+      "https://vixrjkcyrlbwxgegihcm.supabase.co", 
+      "sb_publishable_k4gygyuumSWF1k50bYxzlA_ns1iY3lQ"
+    );
+    
+    let isSignUp = false;
+
+    window.toggleMode = () => {
+      isSignUp = !isSignUp;
+      document.getElementById('form-title').innerText = isSignUp ? "Create Account" : "Sign In";
+      document.getElementById('auth-btn').innerText = isSignUp ? "Sign Up" : "Sign In";
+      document.getElementById('toggle-btn').innerText = isSignUp ? "Already have an account? Sign In" : "Need an account? Sign Up";
+      
+      // Reset the status message when toggling
+      const status = document.getElementById('status');
+      status.innerText = "Enter your credentials";
+      status.classList.remove("text-rose-500");
+      status.classList.add("text-slate-500");
+    };
+
+    window.handleAuth = async () => {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const status = document.getElementById('status');
+
+      // Reset styling before attempting auth
+      status.classList.remove("text-rose-500", "text-emerald-500");
+      status.classList.add("text-slate-500");
+      status.innerText = "Processing...";
+
+      try {
+        if (isSignUp) {
+          const { error } = await supabase.auth.signUp({ email, password });
+          if (error) throw error;
+          
+          status.innerText = "Success! Check your email to confirm.";
+          status.classList.remove("text-slate-500");
+          status.classList.add("text-emerald-500");
+        } else {
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          if (error) throw error;
+        }
+      } catch (err) {
+        status.innerText = err.message;
+        status.classList.remove("text-slate-500", "text-emerald-500");
+        status.classList.add("text-rose-500");
+      }
+    };
+
+    window.signOut = async () => {
+      await supabase.auth.signOut();
+      window.location.reload();
+    };
+
+    // Reactively swap the UI based on auth state
+    supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        document.getElementById('auth-container').classList.add('hidden');
+        document.getElementById('user-box').classList.remove('hidden');
+        
+        const status = document.getElementById('status');
+        status.innerText = "Logged in as " + session.user.email;
+        status.classList.remove("text-rose-500");
+        status.classList.add("text-slate-500");
+      } else {
+        document.getElementById('auth-container').classList.remove('hidden');
+        document.getElementById('user-box').classList.add('hidden');
+      }
+    });
+  </script>
+</body>
+</html>
