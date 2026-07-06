@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Update Profile Picture</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <!-- Cropper JS CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/cropperjs@1.5.13/dist/cropper.min.css" rel="stylesheet"/>
+
+  <style>
+    #previewContainer img {
+      display: block;
+      max-width: 100%;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 flex items-center justify-center min-h-screen p-4 text-slate-900">
+
+  <!-- Processing Overlay -->
+  <div id="processingOverlay" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50 flex-col text-white">
+    <div class="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-white mb-4"></div>
+    <p id="overlayText" class="text-lg font-semibold">Processing...</p>
+  </div>
+
+  <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md space-y-6">
+    
+    <div class="text-center">
+      <a href="manage.html" class="inline-block mb-2 text-emerald-600 font-semibold hover:text-emerald-700">← Back to Manage</a>
+      <h1 class="text-2xl font-bold text-slate-900">Edit Profile Picture</h1>
+      <p id="status" class="text-sm text-slate-500 mt-1">Checking session...</p>
+    </div>
+
+    <!-- Raw Error Display -->
+    <div id="errorBox" class="hidden bg-rose-100 text-rose-700 p-4 rounded-xl text-xs font-mono break-words whitespace-pre-wrap border border-rose-300 overflow-y-auto max-h-48"></div>
+
+    <div id="upload-container" class="hidden space-y-6">
+      
+      <!-- File Input -->
+      <div>
+        <input 
+          type="file" 
+          id="avatar-input" 
+          accept="image/png, image/jpeg, image/webp"
+          class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer border border-slate-200 rounded-xl"
+        >
+      </div>
+
+      <!-- Live Server Preview -->
+      <div id="previewContainer" class="hidden flex justify-center bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-2 min-h-[200px] items-center">
+        <img id="preview-img" class="w-full h-auto max-h-64 object-contain rounded-lg" alt="Server Upload Preview" />
+      </div>
+
+      <!-- Action Buttons -->
+      <div id="action-buttons" class="hidden flex gap-2">
+        <button id="editBtn" class="flex-1 bg-slate-700 text-white font-semibold py-2 rounded-xl hover:bg-slate-800 transition cursor-pointer">Edit Image</button>
+        <button id="discardBtn" class="flex-1 bg-rose-100 text-rose-700 font-semibold py-2 rounded-xl hover:bg-rose-200 transition cursor-pointer">Discard</button>
+      </div>
+
+      <!-- Crop Controls -->
+      <div id="cropControls" class="hidden space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+        <div class="flex justify-center gap-2">
+          <button id="rotateLeft" class="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 font-bold cursor-pointer">⟲</button>
+          <button id="rotateRight" class="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 font-bold cursor-pointer">⟳</button>
+          <button id="applyCrop" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-semibold w-full cursor-pointer">Apply Crop</button>
+        </div>
+        <div class="flex justify-center gap-2 text-sm mt-2">
+          <button data-ratio="free" class="flex-1 py-2 bg-white border rounded hover:bg-slate-100 cursor-pointer">Free</button>
+          <button data-ratio="1" class="flex-1 py-2 bg-white border rounded hover:bg-slate-100 cursor-pointer">1:1</button>
+          <button data-ratio="1.777" class="flex-1 py-2 bg-white border rounded hover:bg-slate-100 cursor-pointer">16:9</button>
+          <button data-ratio="0.8" class="flex-1 py-2 bg-white border rounded hover:bg-slate-100 cursor-pointer">4:5</button>
+        </div>
+      </div>
+      
+      <!-- Save Button -->
+      <button 
+        id="saveBtn" 
+        class="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition cursor-pointer hidden"
+      >
+        Save Profile Picture
+      </button>
+
+    </div>
+  </div>
+
+  <!-- Cropper JS -->
+  <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.5.13/dist/cropper.min.js"></script>
+
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const supabase = createClient(
+      "https://vixrjkcyrlbwxgegihcm.supabase.co", 
+      "sb_publishable_k4gygyuumSWF1k50bYxzlA_ns1iY3lQ"
+    );
+
+    const statusEl = document.getElementById("status");
+    const errorBox = document.getElementById("errorBox");
+    const uploadContainer = document.getElementById("upload-container");
+    const fileInput = document.getElementById("avatar-input");
+    const previewContainer = document.getElementById("previewContainer");
+    const previewImg = document.getElementById("preview-img");
+    
+    const actionButtons = document.getElementById("action-buttons");
+    const editBtn = document.getElementById("editBtn");
+    const discardBtn = document.getElementById("discardBtn");
+    const saveBtn = document.getElementById("saveBtn");
+    const cropControls = document.getElementById("cropControls");
+    const rotateLeft = document.getElementById("rotateLeft");
+    const rotateRight = document.getElementById("rotateRight");
+    const applyCrop = document.getElementById("applyCrop");
+    
+    const overlay = document.getElementById("processingOverlay");
+    const overlayText = document.getElementById("overlayText");
+
+    let currentUserId = null;
+    let uploadedImageUrl = null;
+    let uploadedPublicId = null; // Stored as "avatar_userId"
+    let cropper = null;
+
+    function toggleOverlay(show, text = "Processing...") {
+      overlayText.innerText = text;
+      overlay.classList.toggle("hidden", !show);
+      overlay.classList.toggle("flex", show);
+    }
+
+    function displayError(err) {
+      errorBox.classList.remove("hidden");
+      errorBox.innerText = `RAW ERROR DETAILS:\n\n${err.message || err}\n${err.stack || ''}`;
+      console.error(err);
+    }
+
+    function clearError() {
+      errorBox.classList.add("hidden");
+      errorBox.innerText = "";
+    }
+
+    /* 1. AUTH CHECK */
+    async function checkSession() {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        
+        if (session?.user) {
+          currentUserId = session.user.id;
+          statusEl.innerText = "Select an image to upload.";
+          statusEl.className = "text-sm text-emerald-600 mt-1";
+          uploadContainer.classList.remove("hidden");
+        } else {
+          statusEl.innerText = "Error: Not logged in.";
+          statusEl.className = "text-sm text-rose-500 mt-1";
+        }
+      } catch (err) {
+        displayError(err);
+      }
+    }
+
+    /* 2. AUTO-UPLOAD ON FILE SELECT */
+    fileInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      clearError();
+      previewContainer.classList.add("hidden");
+      actionButtons.classList.add("hidden");
+      saveBtn.classList.add("hidden");
+      cropControls.classList.add("hidden");
+      
+      toggleOverlay(true, "Uploading direct to server...");
+
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("userId", currentUserId);
+
+        const res = await fetch("/api/upload-avatar", { 
+          method: "POST", 
+          body: formData 
+        });
+        
+        if (!res.ok) {
+          const rawErr = await res.text();
+          throw new Error(`HTTP Status Code: ${res.status} ${res.statusText}\n\nServer Response:\n${rawErr}`);
+        }
+        
+        const result = await res.json();
+        
+        uploadedImageUrl = result.url; 
+        uploadedPublicId = result.publicId; // Value is: avatar_userId
+
+        previewImg.src = uploadedImageUrl;
+        previewContainer.classList.remove("hidden");
+        actionButtons.classList.remove("hidden");
+        saveBtn.classList.remove("hidden");
+        statusEl.innerText = "Upload successful! You can edit or save.";
+
+      } catch (err) {
+        displayError(err);
+      } finally {
+        toggleOverlay(false);
+      }
+    });
+
+    /* 3. ENABLE CROPPER */
+    editBtn.onclick = () => {
+      if (!uploadedImageUrl) return;
+      
+      actionButtons.classList.add("hidden");
+      saveBtn.classList.add("hidden");
+      cropControls.classList.remove("hidden");
+      
+      if (cropper) cropper.destroy();
+      cropper = new Cropper(previewImg, { 
+        aspectRatio: NaN, 
+        viewMode: 1, 
+        dragMode: "move", 
+        autoCropArea: 1, 
+        responsive: true 
+      });
+    };
+
+    /* 4. CROP CONTROLS */
+    rotateLeft.onclick = () => cropper && cropper.rotate(-90);
+    rotateRight.onclick = () => cropper && cropper.rotate(90);
+
+    document.querySelectorAll("[data-ratio]").forEach(btn => {
+      btn.onclick = () => {
+        if (!cropper) return;
+        const ratio = btn.dataset.ratio;
+        cropper.setAspectRatio(ratio === "free" ? NaN : parseFloat(ratio));
+      };
+    });
+
+    /* 5. APPLY CROP */
+    applyCrop.onclick = () => {
+      if (!cropper) return;
+      
+      const canvas = cropper.getCroppedCanvas({ maxWidth: 1200, maxHeight: 1200 });
+      previewImg.src = canvas.toDataURL("image/jpeg", 0.9);
+      
+      cropper.destroy();
+      cropper = null;
+      
+      cropControls.classList.add("hidden");
+      actionButtons.classList.remove("hidden");
+      saveBtn.classList.remove("hidden");
+    };
+
+    /* 6. DISCARD UPLOAD (With profiles/ folder prefix logic) */
+    discardBtn.onclick = async () => {
+      if (!uploadedPublicId) return;
+      
+      clearError();
+      toggleOverlay(true, "Removing image...");
+      
+      // Combines the folder name and public ID together -> profiles/avatar_userId
+      const folderPrefixedPublicId = `profiles/${uploadedPublicId}`;
+      
+      try {
+        // Correctly calling your /api/delete-image.js file
+        const res = await fetch("/api/delete-image.js", { 
+          method: "POST", 
+          headers: { "Content-Type": "application/json" }, 
+          body: JSON.stringify({ publicId: folderPrefixedPublicId }) 
+        });
+        
+        if (!res.ok) {
+           const rawErr = await res.text();
+           throw new Error(`Delete Failed. Code: ${res.status}\n\n${rawErr}`);
+        }
+      } catch (err) {
+        displayError(err);
+      } finally {
+        // Clear variables and reset user UI completely
+        uploadedImageUrl = null;
+        uploadedPublicId = null;
+        previewImg.src = "";
+        
+        previewContainer.classList.add("hidden");
+        actionButtons.classList.add("hidden");
+        saveBtn.classList.add("hidden");
+        cropControls.classList.add("hidden");
+        fileInput.value = "";
+        statusEl.innerText = "Select an image to upload.";
+        
+        if (cropper) { cropper.destroy(); cropper = null; }
+        
+        toggleOverlay(false);
+      }
+    };
+
+    /* 7. SAVE TO DATABASE */
+    saveBtn.onclick = async () => {
+      if (!previewImg.src) return;
+      
+      clearError();
+      toggleOverlay(true, "Saving to database...");
+      
+      try {
+        const { error } = await supabase
+          .from("profiles")
+          .update({ 
+            avatar_url: previewImg.src,
+            avatar_public_id: uploadedPublicId 
+          })
+          .eq("id", currentUserId);
+
+        if (error) throw error;
+        
+        statusEl.innerText = "Profile picture saved successfully!";
+        actionButtons.classList.add("hidden");
+        saveBtn.classList.add("hidden");
+        fileInput.value = "";
+        
+      } catch (err) {
+        displayError(err);
+      } finally {
+        toggleOverlay(false);
+      }
+    };
+
+    checkSession();
+  </script>
+</body>
+</html>
