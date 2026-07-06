@@ -245,7 +245,7 @@
         formData.append("userId", currentUser.id);
 
         // 1. Upload to your API
-        const apiResponse = await fetch("/api/upload-avatar", {
+        const apiResponse = await fetch("/api/upload-avatar.js", {
           method: "POST",
           body: formData
         });
