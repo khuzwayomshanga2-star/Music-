@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Google Sign In</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-900 flex items-center justify-center min-h-screen p-4 text-white">
+
+  <div class="bg-slate-800 p-8 rounded-2xl border border-slate-700 w-full max-w-md shadow-2xl space-y-4">
+    <div class="text-center">
+      <h1 class="text-xl font-bold">Google Auth</h1>
+      <p id="status" class="text-xs text-slate-400 mt-2 bg-slate-950 p-2 rounded-sm font-mono break-all">Ready</p>
+    </div>
+
+    <button
+      id="googleBtn"
+      class="w-full flex items-center justify-center gap-3 bg-white text-slate-900 font-bold py-3 px-4 rounded-xl hover:bg-slate-100 transition cursor-pointer shadow-md"
+    >
+      Continue with Google
+    </button>
+
+    <div id="error-box" class="hidden bg-rose-950 border border-rose-700 text-rose-200 text-sm p-3 rounded-xl">
+      <strong class="block mb-1">Error</strong>
+      <pre id="error-text" class="whitespace-pre-wrap break-all text-xs font-mono"></pre>
+    </div>
+
+    <div id="user-box" class="hidden bg-slate-950 border border-slate-700 p-3 rounded-xl">
+      <h2 class="text-sm font-bold text-emerald-400 mb-2">User Data</h2>
+      <pre id="user-json" class="text-[11px] font-mono overflow-x-auto whitespace-pre-wrap break-all text-slate-300"></pre>
+    </div>
+  </div>
+
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const supabase = createClient(
+      "https://vixrjkcyrlbwxgegihcm.supabase.co",
+      "sb_publishable_k4gygyuumSWF1k50bYxzlA_ns1iY3lQ"
+    );
+
+    const googleBtn = document.getElementById("googleBtn");
+    const statusEl = document.getElementById("status");
+    const errorBox = document.getElementById("error-box");
+    const errorText = document.getElementById("error-text");
+    const userBox = document.getElementById("user-box");
+    const userJson = document.getElementById("user-json");
+
+    const log = (txt, color = "black") => {
+      statusEl.innerText = txt;
+      statusEl.style.color = color;
+    };
+
+    function showError(err) {
+      errorBox.classList.remove("hidden");
+      errorText.innerText = typeof err === "string" ? err : JSON.stringify(err, null, 2);
+      console.error(err);
+    }
+
+    function clearError() {
+      errorBox.classList.add("hidden");
+      errorText.innerText = "";
+    }
+
+    function showUser(user) {
+      userBox.classList.remove("hidden");
+      userJson.innerText = JSON.stringify(user, null, 2);
+    }
+
+    async function routeUser(user) {
+      if (!user) return;
+      log("Signed in", "black");
+      showUser(user);
+    }
+
+    supabase.auth.onAuthStateChange((event, session) => {
+      if (session) routeUser(session.user);
+    });
+
+    googleBtn.addEventListener("click", async () => {
+      clearError();
+      log("Authenticating...", "black");
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin + window.location.pathname
+        }
+      });
+
+      if (error) {
+        log(error.message, "red");
+        showError(error);
+      }
+    });
+
+    const checkInitialSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) routeUser(session.user);
+    };
+
+    checkInitialSession();
+  </script>
+</body>
+</html>
