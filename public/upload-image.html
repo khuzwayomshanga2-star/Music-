@@ -1,0 +1,151 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Music Submission Image Upload</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-950 text-white min-h-screen p-4">
+  <div class="max-w-xl mx-auto mt-10 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+    <h1 class="text-2xl font-bold mb-2">Upload Music Image</h1>
+    <p class="text-slate-400 mb-6">Uses the current logged-in session and sends the image to your Vercel backend.</p><div class="mb-4 p-4 rounded-xl bg-slate-800/60 border border-slate-700">
+  <div class="text-sm text-slate-400">Session status</div>
+  <div id="sessionStatus" class="font-semibold mt-1">Loading session...</div>
+  <div id="userInfo" class="text-sm text-slate-300 mt-2"></div>
+</div>
+
+<label class="block text-sm font-semibold mb-2">Submission ID (optional)</label>
+<input id="submissionId" type="text" class="w-full mb-4 rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 outline-none" placeholder="Paste existing row ID here if updating" />
+
+<label class="block text-sm font-semibold mb-2">Title (required only for new row)</label>
+<input id="title" type="text" class="w-full mb-4 rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 outline-none" placeholder="Song title" />
+
+<label class="block text-sm font-semibold mb-2">Music URL (required only for new row)</label>
+<input id="musicUrl" type="text" class="w-full mb-4 rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 outline-none" placeholder="Cloudinary music URL" />
+
+<label class="block text-sm font-semibold mb-2">Select Image</label>
+<input id="imageFile" type="file" accept="image/*" class="w-full mb-4 rounded-xl bg-slate-800 border border-slate-700 px-4 py-3" />
+
+<button id="uploadBtn" class="w-full rounded-xl bg-blue-600 hover:bg-blue-700 transition px-4 py-3 font-bold">
+  Upload Image
+</button>
+
+<div id="status" class="mt-4 hidden rounded-xl px-4 py-3 text-sm"></div>
+
+<img id="preview" class="hidden mt-4 rounded-xl border border-slate-700 max-w-full" alt="Uploaded preview" />
+
+  </div>  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const supabase = createClient(
+      "https://vixrjkcyrlbwxgegihcm.supabase.co",
+      "sb_publishable_k4gygyuumSWF1k50bYxzlA_ns1iY3lQ"
+    );
+
+    const sessionStatus = document.getElementById("sessionStatus");
+    const userInfo = document.getElementById("userInfo");
+    const statusBox = document.getElementById("status");
+    const preview = document.getElementById("preview");
+    const uploadBtn = document.getElementById("uploadBtn");
+
+    function showStatus(message, type = "info") {
+      statusBox.className =
+        "mt-4 rounded-xl px-4 py-3 text-sm " +
+        (type === "success"
+          ? "bg-green-500/15 text-green-300 border border-green-700"
+          : type === "error"
+          ? "bg-red-500/15 text-red-300 border border-red-700"
+          : "bg-blue-500/15 text-blue-300 border border-blue-700");
+      statusBox.textContent = message;
+      statusBox.classList.remove("hidden");
+    }
+
+    async function refreshSession() {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+
+      const currentUser = data.session?.user || null;
+
+      if (currentUser) {
+        sessionStatus.textContent = "Logged in";
+        userInfo.textContent = `User ID: ${currentUser.id} | Email: ${currentUser.email || "N/A"}`;
+      } else {
+        sessionStatus.textContent = "Not logged in";
+        userInfo.textContent = "Please sign in first.";
+      }
+    }
+
+    uploadBtn.addEventListener("click", async () => {
+      try {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+
+        const user = sessionData.session?.user;
+        if (!user) {
+          showStatus("You must be logged in first.", "error");
+          return;
+        }
+
+        const file = document.getElementById("imageFile").files[0];
+        const submissionId = document.getElementById("submissionId").value.trim();
+        const title = document.getElementById("title").value.trim();
+        const musicUrl = document.getElementById("musicUrl").value.trim();
+
+        if (!file) {
+          showStatus("Please choose an image file.", "error");
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("userId", user.id);
+
+        if (submissionId) {
+          formData.append("submissionId", submissionId);
+        } else {
+          if (!title) {
+            showStatus("Title is required when creating a new row.", "error");
+            return;
+          }
+          if (!musicUrl) {
+            showStatus("Music URL is required when creating a new row.", "error");
+            return;
+          }
+          formData.append("title", title);
+          formData.append("musicUrl", musicUrl);
+        }
+
+        showStatus("Uploading image...", "info");
+        uploadBtn.disabled = true;
+
+        const response = await fetch("/api/upload-music-image", {
+          method: "POST",
+          body: formData
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(data.error || data.message || "Upload failed");
+        }
+
+        showStatus(
+          `Uploaded successfully. Row ID: ${data.id}\nImage URL: ${data.image_url}`,
+          "success"
+        );
+
+        preview.src = data.image_url;
+        preview.classList.remove("hidden");
+      } catch (error) {
+        console.error(error);
+        showStatus(error.message || "Something went wrong.", "error");
+      } finally {
+        uploadBtn.disabled = false;
+      }
+    });
+
+    await refreshSession();
+    supabase.auth.onAuthStateChange(async () => {
+      await refreshSession();
+    });
+  </script></body></html>
