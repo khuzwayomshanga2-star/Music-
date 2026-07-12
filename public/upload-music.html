@@ -1,0 +1,194 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Upload Music</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-950 text-white min-h-screen p-4">
+  <div class="max-w-xl mx-auto mt-10 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+    <h1 class="text-2xl font-bold mb-2">Upload Official Audio</h1>
+    <p class="text-slate-400 mb-6">Upload MP3, M4A, WAV, OGG, AAC, FLAC, or MP4 audio files.</p><div class="mb-4 p-4 rounded-xl bg-slate-800/60 border border-slate-700">
+  <div class="text-sm text-slate-400">Session status</div>
+  <div id="sessionStatus" class="font-semibold mt-1">Loading session...</div>
+  <div id="userInfo" class="text-sm text-slate-300 mt-2"></div>
+</div>
+
+<label class="block text-sm font-semibold mb-2">Title</label>
+<input id="title" type="text"
+  class="w-full mb-4 rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 outline-none"
+  placeholder="Song title" />
+
+<label class="block text-sm font-semibold mb-2">Select Audio File</label>
+<input id="audioFile" type="file"
+  accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac,.mp4,video/mp4"
+  class="w-full mb-4 rounded-xl bg-slate-800 border border-slate-700 px-4 py-3" />
+
+<button id="uploadBtn" class="w-full rounded-xl bg-blue-600 hover:bg-blue-700 transition px-4 py-3 font-bold">
+  Upload Audio
+</button>
+
+<div id="status" class="mt-4 hidden rounded-xl px-4 py-3 text-sm"></div>
+
+<div id="resultWrap" class="hidden mt-4 rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+  <div class="text-sm text-slate-400 mb-2">Uploaded file</div>
+  <a id="fileLink" href="#" target="_blank" class="text-blue-300 break-all"></a>
+  <audio id="audioPreview" controls class="w-full mt-4 hidden"></audio>
+</div>
+
+  </div>  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const supabase = createClient(
+      "https://vixrjkcyrlbwxgegihcm.supabase.co",
+      "sb_publishable_k4gygyuumSWF1k50bYxzlA_ns1iY3lQ"
+    );
+
+    const sessionStatus = document.getElementById("sessionStatus");
+    const userInfo = document.getElementById("userInfo");
+    const statusBox = document.getElementById("status");
+    const uploadBtn = document.getElementById("uploadBtn");
+    const resultWrap = document.getElementById("resultWrap");
+    const fileLink = document.getElementById("fileLink");
+    const audioPreview = document.getElementById("audioPreview");
+
+    function showStatus(message, type = "info") {
+      statusBox.className =
+        "mt-4 rounded-xl px-4 py-3 text-sm " +
+        (type === "success"
+          ? "bg-green-500/15 text-green-300 border border-green-700"
+          : type === "error"
+          ? "bg-red-500/15 text-red-300 border border-red-700"
+          : "bg-blue-500/15 text-blue-300 border border-blue-700");
+      statusBox.textContent = message;
+      statusBox.classList.remove("hidden");
+    }
+
+    async function refreshSession() {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+
+      const currentUser = data.session?.user || null;
+
+      if (currentUser) {
+        sessionStatus.textContent = "Logged in";
+        userInfo.textContent = `User ID: ${currentUser.id} | Email: ${currentUser.email || "N/A"}`;
+        return currentUser;
+      } else {
+        sessionStatus.textContent = "Not logged in";
+        userInfo.textContent = "Please sign in first.";
+        return null;
+      }
+    }
+
+    uploadBtn.addEventListener("click", async () => {
+      try {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+
+        const user = sessionData.session?.user;
+        if (!user) {
+          showStatus("You must be logged in first.", "error");
+          return;
+        }
+
+        const file = document.getElementById("audioFile").files[0];
+        const title = document.getElementById("title").value.trim();
+
+        if (!file) {
+          showStatus("Please choose an audio file.", "error");
+          return;
+        }
+
+        if (!title) {
+          showStatus("Please enter a title.", "error");
+          return;
+        }
+
+        uploadBtn.disabled = true;
+        showStatus("Getting signed upload from backend...", "info");
+
+        const sigUrl =
+          `/api/upload-music.js?userId=${encodeURIComponent(user.id)}` +
+          `&title=${encodeURIComponent(title)}`;
+
+        const sigResponse = await fetch(sigUrl);
+        const sigData = await sigResponse.json();
+
+        if (!sigResponse.ok) {
+          throw new Error(sigData.error || "Failed to get signature");
+        }
+
+        showStatus("Uploading audio to Cloudinary...", "info");
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("api_key", sigData.apiKey);
+        formData.append("timestamp", sigData.timestamp);
+        formData.append("signature", sigData.signature);
+        formData.append("folder", sigData.folder);
+
+        const cloudinaryResponse = await fetch(
+          `https://api.cloudinary.com/v1_1/${sigData.cloudName}/raw/upload`,
+          {
+            method: "POST",
+            body: formData
+          }
+        );
+
+        const cloudinaryData = await cloudinaryResponse.json();
+
+        if (!cloudinaryResponse.ok) {
+          throw new Error(cloudinaryData.error?.message || "Failed to upload audio");
+        }
+
+        showStatus("Audio uploaded successfully. Saving to database...", "info");
+
+        const saveResponse = await fetch("/api/save-music-url", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            submissionId: sigData.submissionId,
+            userId: user.id,
+            musicUrl: cloudinaryData.secure_url
+          })
+        });
+
+        const saveData = await saveResponse.json().catch(() => ({}));
+
+        if (!saveResponse.ok) {
+          throw new Error(saveData.error || "Failed to save music URL");
+        }
+
+        const finalSubmissionId = saveData.submissionId || sigData.submissionId;
+
+        showStatus(
+          `Uploaded successfully. Row ID: ${finalSubmissionId}\nMusic URL: ${cloudinaryData.secure_url}`,
+          "success"
+        );
+
+        resultWrap.classList.remove("hidden");
+        fileLink.href = cloudinaryData.secure_url;
+        fileLink.textContent = cloudinaryData.secure_url;
+
+        audioPreview.src = cloudinaryData.secure_url;
+        audioPreview.classList.remove("hidden");
+
+        window.location.href = `upload-image.html?submissionId=${encodeURIComponent(finalSubmissionId)}`;
+      } catch (error) {
+        console.error(error);
+        showStatus(error.message || "Something went wrong.", "error");
+      } finally {
+        uploadBtn.disabled = false;
+      }
+    });
+
+    await refreshSession();
+    supabase.auth.onAuthStateChange(async () => {
+      await refreshSession();
+    });
+  </script></body>
+</html>
