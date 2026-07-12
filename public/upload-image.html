@@ -1,0 +1,564 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Upload Music Image</title>
+  <link href="https://cdn.jsdelivr.net/npm/cropperjs@1.5.13/dist/cropper.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .tab-active { background: #2563eb; color: white; }
+    .tab-inactive { background: #1e293b; color: #cbd5e1; }
+  </style>
+</head>
+<body class="bg-slate-950 text-white min-h-screen p-4">
+  <div class="max-w-4xl mx-auto mt-10 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+    <div class="flex items-start justify-between gap-4 mb-4">
+      <div>
+        <h1 class="text-2xl font-bold mb-2">Submission Editor</h1>
+        <p class="text-slate-400">Use the image tab to upload or crop the cover image, and the title tab to change the title.</p>
+      </div>
+    </div><div class="flex gap-2 mb-6">
+  <button id="imageTabBtn" class="tab-active rounded-xl px-4 py-3 font-bold transition">Music Image Upload</button>
+  <button id="titleTabBtn" class="tab-inactive rounded-xl px-4 py-3 font-bold transition">Edit Title</button>
+</div>
+
+<div class="mb-4 p-4 rounded-xl bg-slate-800/60 border border-slate-700">
+  <div class="text-sm text-slate-400">Session status</div>
+  <div id="sessionStatus" class="font-semibold mt-1">Loading session...</div>
+  <div id="userInfo" class="text-sm text-slate-300 mt-2"></div>
+</div>
+
+<div class="mb-4 p-4 rounded-xl bg-slate-800/60 border border-slate-700">
+  <div class="text-sm text-slate-400">Selected submission</div>
+  <div id="selectedInfo" class="font-semibold mt-1">None selected</div>
+  <div id="selectedExtra" class="text-sm text-slate-300 mt-2 whitespace-pre-line"></div>
+</div>
+
+<div id="imagePane" class="space-y-4 transition-all duration-300">
+  <input id="submissionId" type="hidden" />
+
+  <label class="block text-sm font-semibold mb-2">Load Submission</label>
+  <div class="flex gap-2">
+    <input id="submissionLookup" type="text" class="flex-1 rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 outline-none" placeholder="Paste submission here if needed" />
+    <button id="loadBtn" class="rounded-xl bg-slate-700 hover:bg-slate-600 transition px-4 py-3 font-bold">Load</button>
+  </div>
+
+  <label class="block text-sm font-semibold mb-2">Select Image</label>
+  <input id="imageFile" type="file" accept="image/*" class="w-full rounded-xl bg-slate-800 border border-slate-700 px-4 py-3" />
+
+  <div id="progressContainer" class="hidden mt-2 p-4 rounded-xl bg-slate-800/60 border border-slate-700">
+    <div class="flex justify-between text-sm text-slate-300 mb-2">
+      <span id="progressLabel">Uploading...</span>
+      <span id="progressText">0%</span>
+    </div>
+    <div class="w-full bg-slate-700 rounded-full h-2.5">
+      <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+    </div>
+  </div>
+
+  <div id="previewContainer" class="mt-4 hidden">
+    <img id="imagePreview" src="" crossorigin="anonymous" class="max-w-full rounded-xl mx-auto block" />
+  </div>
+
+  <div id="cropControls" class="hidden text-center">
+    <div class="flex flex-wrap gap-2 justify-center mb-3">
+      <button id="rotateLeft" class="rounded-xl bg-slate-700 hover:bg-slate-600 transition px-4 py-2">⟲</button>
+      <button id="rotateRight" class="rounded-xl bg-slate-700 hover:bg-slate-600 transition px-4 py-2">⟳</button>
+      <button id="applyCrop" class="rounded-xl bg-blue-600 hover:bg-blue-700 transition px-4 py-2 font-bold">Apply Crop</button>
+      <button id="discardBtn" class="rounded-xl bg-red-600 hover:bg-red-700 transition px-4 py-2 font-bold">Discard</button>
+    </div>
+    <div class="flex flex-wrap gap-2 justify-center">
+      <button data-ratio="free" class="rounded-xl bg-slate-700 hover:bg-slate-600 transition px-4 py-2">Free</button>
+      <button data-ratio="1" class="rounded-xl bg-slate-700 hover:bg-slate-600 transition px-4 py-2">1:1</button>
+      <button data-ratio="1.777" class="rounded-xl bg-slate-700 hover:bg-slate-600 transition px-4 py-2">16:9</button>
+      <button data-ratio="0.8" class="rounded-xl bg-slate-700 hover:bg-slate-600 transition px-4 py-2">4:5</button>
+    </div>
+  </div>
+
+  <button id="saveImageBtn" class="hidden w-full rounded-xl bg-blue-600 hover:bg-blue-700 transition px-4 py-3 font-bold">
+    Upload Edited Image
+  </button>
+</div>
+
+<div id="titlePane" class="hidden space-y-4 transition-all duration-300">
+  <input id="titleSubmissionId" type="hidden" />
+
+  <label class="block text-sm font-semibold mb-2">Load Submission</label>
+  <div class="flex gap-2">
+    <input id="titleLookup" type="text" class="flex-1 rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 outline-none" placeholder="Paste submission here if needed" />
+    <button id="loadTitleBtn" class="rounded-xl bg-slate-700 hover:bg-slate-600 transition px-4 py-3 font-bold">Load</button>
+  </div>
+
+  <label class="block text-sm font-semibold mb-2">Change Title</label>
+  <input id="titleInput" type="text" class="w-full rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 outline-none" placeholder="New title" />
+
+  <button id="saveTitleBtn" class="w-full rounded-xl bg-blue-600 hover:bg-blue-700 transition px-4 py-3 font-bold">
+    Save Title
+  </button>
+</div>
+
+<div id="status" class="mt-4 hidden rounded-xl px-4 py-3 text-sm"></div>
+
+<div id="uploadResult" class="hidden mt-4 rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+  <div class="text-sm text-slate-400 mb-2">Uploaded image preview</div>
+  <img id="uploadedPreview" class="w-full rounded-xl border border-slate-700" alt="Uploaded preview" />
+</div>
+
+  </div>  <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.5.13/dist/cropper.min.js"></script>  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const supabase = createClient(
+      "https://vixrjkcyrlbwxgegihcm.supabase.co",
+      "sb_publishable_k4gygyuumSWF1k50bYxzlA_ns1iY3lQ"
+    );
+
+    const sessionStatus = document.getElementById("sessionStatus");
+    const userInfo = document.getElementById("userInfo");
+    const selectedInfo = document.getElementById("selectedInfo");
+    const selectedExtra = document.getElementById("selectedExtra");
+    const statusBox = document.getElementById("status");
+    const uploadResult = document.getElementById("uploadResult");
+    const uploadedPreview = document.getElementById("uploadedPreview");
+
+    const imageTabBtn = document.getElementById("imageTabBtn");
+    const titleTabBtn = document.getElementById("titleTabBtn");
+    const imagePane = document.getElementById("imagePane");
+    const titlePane = document.getElementById("titlePane");
+
+    const submissionIdInput = document.getElementById("submissionId");
+    const titleSubmissionIdInput = document.getElementById("titleSubmissionId");
+    const submissionLookup = document.getElementById("submissionLookup");
+    const titleLookup = document.getElementById("titleLookup");
+    const titleInput = document.getElementById("titleInput");
+    const loadBtn = document.getElementById("loadBtn");
+    const loadTitleBtn = document.getElementById("loadTitleBtn");
+
+    const imageFileEl = document.getElementById("imageFile");
+    const previewContainer = document.getElementById("previewContainer");
+    const imagePreviewEl = document.getElementById("imagePreview");
+    const cropControls = document.getElementById("cropControls");
+    const rotateLeft = document.getElementById("rotateLeft");
+    const rotateRight = document.getElementById("rotateRight");
+    const applyCrop = document.getElementById("applyCrop");
+    const discardBtn = document.getElementById("discardBtn");
+    const saveImageBtn = document.getElementById("saveImageBtn");
+    const saveTitleBtn = document.getElementById("saveTitleBtn");
+
+    const progressContainer = document.getElementById("progressContainer");
+    const progressBar = document.getElementById("progressBar");
+    const progressText = document.getElementById("progressText");
+
+    let cropper = null;
+    let currentUser = null;
+    let currentSubmission = null;
+    let originalFile = null;
+    let finalImageBlob = null;
+    let previewUrl = null;
+
+    function showStatus(message, type = "info") {
+      statusBox.className =
+        "mt-4 rounded-xl px-4 py-3 text-sm " +
+        (type === "success"
+          ? "bg-green-500/15 text-green-300 border border-green-700"
+          : type === "error"
+          ? "bg-red-500/15 text-red-300 border border-red-700"
+          : "bg-blue-500/15 text-blue-300 border border-blue-700");
+      statusBox.textContent = message;
+      statusBox.classList.remove("hidden");
+    }
+
+    function switchTab(tab) {
+      const imageActive = tab === "image";
+      imagePane.classList.toggle("hidden", !imageActive);
+      titlePane.classList.toggle("hidden", imageActive);
+
+      imageTabBtn.className = imageActive
+        ? "tab-active rounded-xl px-4 py-3 font-bold transition"
+        : "tab-inactive rounded-xl px-4 py-3 font-bold transition";
+
+      titleTabBtn.className = !imageActive
+        ? "tab-active rounded-xl px-4 py-3 font-bold transition"
+        : "tab-inactive rounded-xl px-4 py-3 font-bold transition";
+    }
+
+    imageTabBtn.addEventListener("click", () => switchTab("image"));
+    titleTabBtn.addEventListener("click", () => switchTab("title"));
+
+    function getSubmissionIdFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("submissionId") || "";
+    }
+
+    function setSubmissionIds(value) {
+      submissionIdInput.value = value || "";
+      titleSubmissionIdInput.value = value || "";
+      submissionLookup.value = value || "";
+      titleLookup.value = value || "";
+    }
+
+    async function refreshSession() {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+
+      currentUser = data.session?.user || null;
+
+      if (currentUser) {
+        sessionStatus.textContent = "Logged in";
+        userInfo.textContent = `Email: ${currentUser.email || "N/A"}`;
+        return currentUser;
+      } else {
+        sessionStatus.textContent = "Not logged in";
+        userInfo.textContent = "Please sign in first.";
+        return null;
+      }
+    }
+
+    async function loadSubmission(submissionId) {
+      if (!submissionId) {
+        selectedInfo.textContent = "No submission selected";
+        selectedExtra.textContent = "Paste a submission ID or open this page from the pending list.";
+        currentSubmission = null;
+        return;
+      }
+
+      setSubmissionIds(submissionId);
+      selectedInfo.textContent = "Loading selected submission...";
+      selectedExtra.textContent = "";
+
+      const { data, error } = await supabase.rpc("get_my_music_submission", {
+        submission_id: submissionId
+      });
+
+      if (error) {
+        console.error(error);
+        showStatus(error.message || "Failed to load submission", "error");
+        selectedInfo.textContent = "Could not load submission";
+        currentSubmission = null;
+        return;
+      }
+
+      const item = Array.isArray(data) ? data[0] : data;
+
+      if (!item) {
+        selectedInfo.textContent = "Submission not found";
+        selectedExtra.textContent = "This row may not belong to you, or it may not exist.";
+        currentSubmission = null;
+        return;
+      }
+
+      currentSubmission = item;
+
+      selectedInfo.textContent = item.title || "Untitled";
+      selectedExtra.textContent =
+        `Acceptance: ${item.acceptance}\n` +
+        `Comment: ${item.comment || "No comment yet"}\n` +
+        `Created: ${item.created_at ? new Date(item.created_at).toLocaleString() : "Unknown"}`;
+
+      titleInput.value = item.title || "";
+    }
+
+    function uploadFileWithProgress(fileOrBlob, submissionId, title, onSuccess, onError, onProgress) {
+      const formData = new FormData();
+      formData.append("file", fileOrBlob);
+      formData.append("userId", currentUser.id);
+      formData.append("submissionId", submissionId);
+      formData.append("title", title);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/upload-music-image", true);
+
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent);
+        }
+      });
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            onSuccess(data);
+          } catch {
+            onError("Invalid JSON response from server");
+          }
+        } else {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            onError(data.error || data.message || "Upload failed");
+          } catch {
+            onError(`Upload failed with status ${xhr.status}`);
+          }
+        }
+      };
+
+      xhr.onerror = () => onError("Network Error: Failed to upload");
+      xhr.send(formData);
+    }
+
+    imageFileEl.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const submissionId = submissionIdInput.value.trim();
+      if (!submissionId) {
+        showStatus("Please load a submission first.", "error");
+        imageFileEl.value = "";
+        return;
+      }
+
+      if (!currentUser) {
+        showStatus("You must be logged in first.", "error");
+        imageFileEl.value = "";
+        return;
+      }
+
+      originalFile = file;
+      finalImageBlob = null;
+      saveImageBtn.classList.remove("hidden");
+      uploadResult.classList.add("hidden");
+
+      if (cropper) {
+        cropper.destroy();
+        cropper = null;
+      }
+
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+
+      progressContainer.classList.remove("hidden");
+      progressBar.style.width = "0%";
+      progressText.textContent = "0%";
+      showStatus("Uploading image...", "info");
+
+      uploadFileWithProgress(
+        file,
+        submissionId,
+        titleInput.value.trim(),
+        (data) => {
+          progressContainer.classList.add("hidden");
+          showStatus("Upload complete. You can now crop the image.", "success");
+
+          previewUrl = data.image_url + "?t=" + Date.now();
+          imagePreviewEl.src = previewUrl;
+          previewContainer.classList.remove("hidden");
+          cropControls.classList.remove("hidden");
+          saveImageBtn.classList.remove("hidden");
+
+          imagePreviewEl.onload = () => {
+            if (cropper) cropper.destroy();
+            cropper = new Cropper(imagePreviewEl, {
+              aspectRatio: NaN,
+              viewMode: 1,
+              dragMode: "move",
+              autoCropArea: 1,
+              responsive: true,
+              checkCrossOrigin: false
+            });
+            imagePreviewEl.onload = null;
+          };
+        },
+        (errorMsg) => {
+          progressContainer.classList.add("hidden");
+          showStatus(errorMsg, "error");
+          imageFileEl.value = "";
+          saveImageBtn.classList.add("hidden");
+        },
+        (percent) => {
+          progressBar.style.width = percent + "%";
+          progressText.textContent = percent + "%";
+        }
+      );
+    });
+
+    rotateLeft.onclick = () => cropper && cropper.rotate(-90);
+    rotateRight.onclick = () => cropper && cropper.rotate(90);
+
+    document.querySelectorAll("[data-ratio]").forEach((btn) => {
+      btn.onclick = () => {
+        if (!cropper) return;
+        const ratio = btn.dataset.ratio;
+        cropper.setAspectRatio(ratio === "free" ? NaN : parseFloat(ratio));
+      };
+    });
+
+    applyCrop.onclick = () => {
+      if (!cropper) return;
+      const canvas = cropper.getCroppedCanvas({ maxWidth: 1200, maxHeight: 1200 });
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        finalImageBlob = blob;
+        imagePreviewEl.src = canvas.toDataURL("image/jpeg", 0.92);
+        cropper.destroy();
+        cropper = null;
+        cropControls.classList.add("hidden");
+        showStatus("Crop applied.", "info");
+      }, "image/jpeg", 0.92);
+    };
+
+    discardBtn.onclick = () => {
+      originalFile = null;
+      finalImageBlob = null;
+      imageFileEl.value = "";
+      previewContainer.classList.add("hidden");
+      cropControls.classList.add("hidden");
+      uploadResult.classList.add("hidden");
+      saveImageBtn.classList.add("hidden");
+      if (cropper) {
+        cropper.destroy();
+        cropper = null;
+      }
+      if (previewUrl && previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      previewUrl = null;
+      imagePreviewEl.src = "";
+      showStatus("Image cleared.", "info");
+    };
+
+    async function saveTitle() {
+      const submissionId = titleSubmissionIdInput.value.trim();
+      const newTitle = titleInput.value.trim();
+
+      if (!submissionId) {
+        showStatus("Load a submission first.", "error");
+        return;
+      }
+
+      if (!newTitle) {
+        showStatus("Please enter a title.", "error");
+        return;
+      }
+
+      if (!currentUser) {
+        showStatus("You must be logged in first.", "error");
+        return;
+      }
+
+      saveTitleBtn.disabled = true;
+      showStatus("Saving title...", "info");
+
+      const { error } = await supabase.rpc("update_my_music_title", {
+        submission_id: submissionId,
+        new_title: newTitle
+      });
+
+      if (error) {
+        saveTitleBtn.disabled = false;
+        showStatus(error.message || "Failed to update title", "error");
+        return;
+      }
+
+      showStatus("Title updated successfully.", "success");
+      await loadSubmission(submissionId);
+      saveTitleBtn.disabled = false;
+    }
+
+    saveTitleBtn.onclick = saveTitle;
+
+    async function uploadEditedImage() {
+      if (!currentUser) {
+        showStatus("You must be logged in first.", "error");
+        return;
+      }
+
+      const submissionId = submissionIdInput.value.trim();
+      if (!submissionId) {
+        showStatus("Load a submission first.", "error");
+        return;
+      }
+
+      if (!originalFile && !finalImageBlob) {
+        showStatus("Choose an image first.", "error");
+        return;
+      }
+
+      if (cropper) {
+        showStatus("Apply the crop before uploading.", "error");
+        return;
+      }
+
+      saveImageBtn.disabled = true;
+      showStatus("Uploading edited image...", "info");
+
+      const fileToUpload = finalImageBlob
+        ? new File([finalImageBlob], originalFile?.name || "edited_image.jpg", {
+            type: finalImageBlob.type || "image/jpeg"
+          })
+        : originalFile;
+
+      uploadFileWithProgress(
+        fileToUpload,
+        submissionId,
+        titleInput.value.trim(),
+        (data) => {
+          progressContainer.classList.add("hidden");
+          uploadedPreview.src = data.image_url || "";
+          uploadResult.classList.remove("hidden");
+          showStatus("Image uploaded successfully.", "success");
+
+          originalFile = null;
+          finalImageBlob = null;
+          imageFileEl.value = "";
+          previewContainer.classList.add("hidden");
+          cropControls.classList.add("hidden");
+          saveImageBtn.classList.add("hidden");
+          imagePreviewEl.src = "";
+          if (cropper) {
+            cropper.destroy();
+            cropper = null;
+          }
+          if (previewUrl && previewUrl.startsWith("blob:")) {
+            URL.revokeObjectURL(previewUrl);
+          }
+          previewUrl = null;
+          saveImageBtn.disabled = false;
+        },
+        (errorMsg) => {
+          progressContainer.classList.add("hidden");
+          showStatus(errorMsg, "error");
+          saveImageBtn.disabled = false;
+        },
+        (percent) => {
+          progressBar.style.width = percent + "%";
+          progressText.textContent = percent + "%";
+        }
+      );
+    }
+
+    saveImageBtn.onclick = uploadEditedImage;
+
+    loadBtn.onclick = async () => {
+      const id = submissionLookup.value.trim();
+      submissionIdInput.value = id;
+      titleSubmissionIdInput.value = id;
+      await loadSubmission(id);
+    };
+
+    loadTitleBtn.onclick = async () => {
+      const id = titleLookup.value.trim();
+      submissionIdInput.value = id;
+      titleSubmissionIdInput.value = id;
+      await loadSubmission(id);
+    };
+
+    const user = await refreshSession();
+    const urlSubmissionId = getSubmissionIdFromUrl();
+    if (urlSubmissionId) {
+      setSubmissionIds(urlSubmissionId);
+      await loadSubmission(urlSubmissionId);
+    }
+
+    supabase.auth.onAuthStateChange(async () => {
+      const u = await refreshSession();
+      if (u) {
+        const id = submissionIdInput.value.trim() || getSubmissionIdFromUrl();
+        if (id) {
+          await loadSubmission(id);
+        }
+      }
+    });
+  </script></body>
+  </html>
