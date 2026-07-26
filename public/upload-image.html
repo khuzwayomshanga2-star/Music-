@@ -1,0 +1,82 @@
+<!DOCTYPE html><html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Submission Viewer</title><script src="https://cdn.tailwindcss.com"></script><script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+const supabase = createClient(
+  "https://vixrjkcyrlbwxgegihcm.supabase.co",
+  "sb_publishable_k4gygyuumSWF1k50bYxzlA_ns1iY3lQ"
+);
+
+const status = document.getElementById("status");
+const card = document.getElementById("card");
+const rawDataEl = document.getElementById("rawData");
+
+function pretty(value) {
+  return JSON.stringify(value, null, 2);
+}
+
+async function loadSubmission() {
+  try {
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+    if (sessionError) {
+      status.textContent = sessionError.message;
+      return;
+    }
+
+    if (!sessionData.session) {
+      status.textContent = "Please sign in.";
+      return;
+    }
+
+    const submissionId = new URLSearchParams(location.search).get("submissionId");
+
+    if (!submissionId) {
+      status.textContent = "No submissionId found in URL.";
+      return;
+    }
+
+    status.textContent = "Loading...";
+
+    const { data, error } = await supabase.rpc("get_my_music_submission", {
+      submission_id: submissionId
+    });
+
+    if (error) {
+      status.textContent = error.message;
+      return;
+    }
+
+    const submission = Array.isArray(data) ? data[0] : data;
+
+    if (!submission) {
+      status.textContent = "Submission not found.";
+      return;
+    }
+
+    rawDataEl.textContent = pretty(submission);
+    card.classList.remove("hidden");
+    status.textContent = "";
+  } catch (err) {
+    status.textContent = err?.message || "Something went wrong.";
+  }
+}
+
+window.addEventListener("DOMContentLoaded", loadSubmission);
+</script></head><body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-6">
+  <div class="w-full max-w-3xl">
+    <h1 class="text-3xl font-bold mb-6">Submission Viewer</h1><p id="status" class="text-slate-300 mb-4">Loading...</p>
+
+<div id="card" class="hidden bg-slate-800 rounded-xl p-5">
+  <div class="mb-3">
+    <p class="text-slate-400 mb-2">Raw data</p>
+    <pre id="rawData" class="whitespace-pre-wrap break-words text-sm bg-slate-950/60 border border-slate-700 rounded-lg p-4 overflow-auto max-h-[70vh]"></pre>
+  </div>
+</div>
+
+  </div>
+</body>
+</html>
