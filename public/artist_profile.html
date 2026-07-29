@@ -1,0 +1,279 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Artist Profile</title>  <script src="https://cdn.tailwindcss.com"></script>  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>  <style>
+    :root { color-scheme: dark; }
+
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .glass {
+      background: rgba(15, 23, 42, 0.72);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+
+    .bg-glow {
+      background:
+        radial-gradient(circle at top left, rgba(34, 197, 94, 0.18), transparent 30%),
+        radial-gradient(circle at top right, rgba(59, 130, 246, 0.18), transparent 28%),
+        linear-gradient(180deg, #020617 0%, #020617 100%);
+    }
+
+    .card {
+      transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 18px 40px rgba(0,0,0,.35);
+      border-color: rgba(34, 197, 94, 0.45);
+    }
+
+    .song-scroll {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(148,163,184,.35) transparent;
+    }
+
+    .song-scroll::-webkit-scrollbar { height: 8px; }
+    .song-scroll::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.35);
+      border-radius: 9999px;
+    }
+
+    .hero-ring {
+      background: radial-gradient(circle, rgba(34, 197, 94, 0.22), transparent 65%);
+    }
+
+    .skeleton {
+      position: relative;
+      overflow: hidden;
+      background: rgba(30, 41, 59, 0.8);
+    }
+
+    .skeleton::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      transform: translateX(-100%);
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent);
+      animation: shimmer 1.2s infinite;
+    }
+
+    @keyframes shimmer {
+      100% { transform: translateX(100%); }
+    }
+  </style></head><body class="bg-glow text-white min-h-screen">
+  <div class="max-w-6xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+    <div class="glass border border-slate-800 rounded-[28px] shadow-2xl overflow-hidden">
+      <div class="p-5 sm:p-7 border-b border-slate-800">
+        <div class="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200 mb-4">
+          <span>🎵</span>
+          <span>Artist Profile</span>
+        </div>    <div class="flex flex-col gap-4">
+      <h1 id="pageTitle" class="text-3xl sm:text-5xl font-black tracking-tight">Loading artist...</h1>
+      <p class="text-slate-300 max-w-2xl">
+        Songs by this musician are shown below in a clean streaming-style layout.
+      </p>
+    </div>
+  </div>
+
+  <div class="p-5 sm:p-7">
+    <div id="loadingState" class="rounded-[28px] border border-slate-800 bg-slate-900/60 p-6 animate-pulse">
+      <div class="flex flex-col items-center text-center gap-4">
+        <div class="h-44 w-44 rounded-full bg-slate-800"></div>
+        <div class="h-8 w-64 rounded bg-slate-800"></div>
+        <div class="h-4 w-40 rounded bg-slate-800"></div>
+      </div>
+      <div class="mt-8 h-6 w-40 rounded bg-slate-800"></div>
+      <div class="mt-4 space-y-3">
+        <div class="h-20 rounded-2xl bg-slate-800"></div>
+        <div class="h-20 rounded-2xl bg-slate-800"></div>
+        <div class="h-20 rounded-2xl bg-slate-800"></div>
+      </div>
+    </div>
+
+    <div id="errorState" class="hidden rounded-3xl border border-red-800 bg-red-500/10 p-5 text-red-200"></div>
+
+    <div id="profileCard" class="hidden">
+      <div class="flex flex-col items-center text-center">
+        <div class="relative">
+          <div class="hero-ring absolute -inset-10 rounded-full blur-3xl"></div>
+
+          <img
+            id="avatar"
+            alt="Artist profile picture"
+            class="relative h-44 w-44 sm:h-56 sm:w-56 rounded-full object-cover border-4 border-slate-900 shadow-2xl bg-slate-950 hidden"
+          />
+
+          <div
+            id="avatarFallback"
+            class="relative hidden h-44 w-44 sm:h-56 sm:w-56 rounded-full border-4 border-slate-900 shadow-2xl bg-slate-900 items-center justify-center text-5xl sm:text-6xl font-black text-slate-300"
+          ></div>
+        </div>
+
+        <h2 id="artistName" class="mt-6 text-3xl sm:text-5xl font-black tracking-tight"></h2>
+        <p id="artistTag" class="mt-2 text-slate-300">Accepted music</p>
+      </div>
+
+      <div class="mt-10">
+        <div class="flex items-center justify-between gap-3 flex-wrap mb-4">
+          <div>
+            <h3 class="text-xl sm:text-2xl font-bold">Songs</h3>
+            <p class="text-sm text-slate-400">Scroll through the tracks below.</p>
+          </div>
+        </div>
+
+        <div id="songsWrap" class="song-scroll overflow-x-auto pb-2">
+          <div id="songsList" class="space-y-3 min-w-[680px]"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="emptyState" class="hidden rounded-3xl border border-slate-800 bg-slate-900/60 p-10 text-center">
+      <div class="text-5xl mb-3">🎧</div>
+      <h2 class="text-2xl font-bold">No songs found</h2>
+      <p class="mt-2 text-slate-400">This artist does not have accepted songs yet.</p>
+    </div>
+  </div>
+</div>
+
+  </div>  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const supabase = createClient(
+      "https://vixrjkcyrlbwxgegihcm.supabase.co",
+      "sb_publishable_k4gygyuumSWF1k50bYxzlA_ns1iY3lQ"
+    );
+
+    const loadingState = document.getElementById("loadingState");
+    const errorState = document.getElementById("errorState");
+    const emptyState = document.getElementById("emptyState");
+    const profileCard = document.getElementById("profileCard");
+
+    const pageTitle = document.getElementById("pageTitle");
+    const avatar = document.getElementById("avatar");
+    const avatarFallback = document.getElementById("avatarFallback");
+    const artistName = document.getElementById("artistName");
+    const artistTag = document.getElementById("artistTag");
+    const songsList = document.getElementById("songsList");
+
+    function escapeHtml(str) {
+      return String(str ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function initials(name) {
+      const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+      if (!parts.length) return "M";
+      return parts.slice(0, 2).map(p => p[0]?.toUpperCase() || "").join("");
+    }
+
+    function getUserIdFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("id") || params.get("userId") || "";
+    }
+
+    function songRow(item, index) {
+      const cover = item.image_url || "";
+      const title = item.title || "Untitled song";
+      const musicUrl = item.music_url || "#";
+
+      return `
+        <a
+          href="${escapeHtml(musicUrl)}"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="card flex items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4"
+        >
+          <div class="h-16 w-16 sm:h-20 sm:w-20 rounded-xl overflow-hidden bg-slate-950 border border-slate-800 flex-shrink-0">
+            ${
+              cover
+                ? `<img src="${escapeHtml(cover)}" alt="${escapeHtml(title)}" class="h-full w-full object-cover" loading="lazy" />`
+                : `<div class="h-full w-full flex items-center justify-center text-slate-400 font-black">${index + 1}</div>`
+            }
+          </div>
+
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <div class="h-2.5 w-2.5 rounded-full bg-emerald-400"></div>
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Track ${index + 1}</p>
+            </div>
+            <h4 class="mt-1 text-lg sm:text-xl font-bold truncate">${escapeHtml(title)}</h4>
+            <p class="mt-1 text-sm text-slate-400 truncate">Tap to open music link</p>
+          </div>
+
+          <div class="text-slate-400 text-2xl flex-shrink-0">›</div>
+        </a>
+      `;
+    }
+
+    async function loadArtist() {
+      const userId = getUserIdFromUrl();
+
+      if (!userId) {
+        loadingState.classList.add("hidden");
+        errorState.textContent = "No id found in the URL.";
+        errorState.classList.remove("hidden");
+        pageTitle.textContent = "Artist profile";
+        return;
+      }
+
+      loadingState.classList.remove("hidden");
+      errorState.classList.add("hidden");
+      emptyState.classList.add("hidden");
+      profileCard.classList.add("hidden");
+
+      const { data, error } = await supabase.rpc("get_accepted_music_submissions_by_user", {
+        p_user_id: userId
+      });
+
+      loadingState.classList.add("hidden");
+
+      if (error) {
+        errorState.textContent = error.message || "Failed to load artist.";
+        errorState.classList.remove("hidden");
+        pageTitle.textContent = "Artist profile";
+        return;
+      }
+
+      const songs = Array.isArray(data) ? data : [];
+
+      if (!songs.length) {
+        pageTitle.textContent = "Artist profile";
+        emptyState.classList.remove("hidden");
+        return;
+      }
+
+      const first = songs[0];
+      const name = first.full_name || "Unnamed artist";
+      const image = first.avatar_url || "";
+
+      pageTitle.textContent = name;
+      artistName.textContent = name;
+      artistTag.textContent = `${songs.length} accepted song${songs.length === 1 ? "" : "s"}`;
+
+      if (image) {
+        avatar.src = image;
+        avatar.classList.remove("hidden");
+        avatarFallback.classList.add("hidden");
+      } else {
+        avatar.classList.add("hidden");
+        avatarFallback.textContent = initials(name);
+        avatarFallback.classList.remove("hidden");
+        avatarFallback.classList.add("flex");
+      }
+
+      songsList.innerHTML = songs.map((item, index) => songRow(item, index)).join("");
+      profileCard.classList.remove("hidden");
+    }
+
+    window.addEventListener("DOMContentLoaded", loadArtist);
+  </script></body>
+      </html>
