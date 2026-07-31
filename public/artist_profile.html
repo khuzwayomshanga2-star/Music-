@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Artist Profile</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    :root { color-scheme: dark; }
+
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background-color: #121212;
+    }
+
+    .bg-glow {
+      background:
+        radial-gradient(circle at top left, rgba(34, 197, 94, 0.1), transparent 40%),
+        linear-gradient(180deg, #121212 0%, #000000 100%);
+    }
+
+    .song-scroll {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,.2) transparent;
+    }
+
+    .song-scroll::-webkit-scrollbar { height: 6px; }
+    .song-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 9999px;
+    }
+
+    .range-container:hover .range::-webkit-slider-thumb {
+      opacity: 1;
+    }
+
+    .range-container:hover .range::-moz-range-thumb {
+      opacity: 1;
+    }
+
+    .range-container:hover .range {
+      background: linear-gradient(to right, #1db954 var(--progress, 0%), rgba(255,255,255,0.2) var(--progress, 0%)) !important;
+    }
+
+    .range {
+      appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 2px;
+      background: linear-gradient(to right, #ffffff var(--progress, 0%), rgba(255,255,255,0.2) var(--progress, 0%));
+      outline: none;
+      transition: background 0.1s;
+      cursor: pointer;
+    }
+
+    .range::-webkit-slider-thumb {
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #ffffff;
+      margin-top: 0px;
+      cursor: pointer;
+      border: 0;
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    .range::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+
+    .range::-moz-range-thumb {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #ffffff;
+      cursor: pointer;
+      border: 0;
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    .mini-player {
+      background-color: #1a1a1a;
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+
+    .player-overlay {
+      background: linear-gradient(180deg, #2a2a2a 0%, #121212 100%);
+    }
+
+    #playerUIContainer {
+      transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+  </style>
+</head>
+
+<body class="bg-glow text-white min-h-screen pb-24">
+  <div class="max-w-4xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+
+    <div id="loadingState" class="animate-pulse flex flex-col items-center">
+      <div class="h-40 w-40 rounded-full bg-zinc-800"></div>
+      <div class="h-8 w-48 rounded bg-zinc-800 mt-6"></div>
+      <div class="h-4 w-24 rounded bg-zinc-800 mt-2"></div>
+    </div>
+
+    <div id="errorState" class="hidden rounded-lg bg-red-900/20 p-4 text-red-400 text-center"></div>
+
+    <div id="profileCard" class="hidden">
+      <div class="flex flex-col sm:flex-row items-center sm:items-end gap-6 mb-10">
+        <div class="relative shadow-2xl">
+          <img
+            id="avatar"
+            alt="Artist profile picture"
+            class="h-48 w-48 sm:h-56 sm:w-56 rounded-full object-cover shadow-2xl hidden"
+          />
+          <div
+            id="avatarFallback"
+            class="hidden h-48 w-48 sm:h-56 sm:w-56 rounded-full bg-zinc-800 items-center justify-center text-6xl font-black text-zinc-500 shadow-2xl"
+          ></div>
+        </div>
+        <div class="text-center sm:text-left">
+          <div class="flex items-center justify-center sm:justify-start gap-2 text-sm font-semibold text-zinc-300 mb-2">
+            <svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-blue-400"><path fill-rule="evenodd" d="M8.603 3.799A4.49 4.49 0 0112 2.25c1.357 0 2.573.6 3.397 1.549a4.49 4.49 0 013.498 1.307 4.491 4.491 0 011.307 3.497A4.49 4.49 0 0121.75 12a4.49 4.49 0 01-1.549 3.397 4.491 4.491 0 01-1.307 3.497 4.491 4.491 0 01-3.497 1.307A4.49 4.49 0 0112 21.75a4.49 4.49 0 01-3.397-1.549 4.49 4.49 0 01-3.498-1.306 4.491 4.491 0 01-1.307-3.498A4.49 4.49 0 012.25 12c0-1.357.6-2.573 1.549-3.397a4.49 4.49 0 011.307-3.497 4.49 4.49 0 013.497-1.307zm7.007 6.387a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 11.22a.75.75 0 00-1.06 1.06l2.5 2.5a.75.75 0 001.137-.089l4.5-6.25z" clip-rule="evenodd" /></svg>
+            <span>Verified Artist</span>
+          </div>
+          <h1 id="artistName" class="text-5xl sm:text-7xl font-black tracking-tighter"></h1>
+          <p id="artistTag" class="mt-4 text-zinc-400 font-medium"></p>
+        </div>
+      </div>
+
+      <div>
+        <h2 class="text-2xl font-bold mb-4">Songs</h2>
+        <div id="songsList" class="flex flex-col gap-1"></div>
+      </div>
+    </div>
+
+    <div id="emptyState" class="hidden py-20 text-center">
+      <h2 class="text-2xl font-bold text-zinc-300">No songs found</h2>
+      <p class="mt-2 text-zinc-500">This artist hasn't uploaded any accepted tracks yet.</p>
+    </div>
+  </div>
+
+  <div id="miniPlayer" class="fixed left-2 right-2 bottom-2 z-40 hidden sm:left-4 sm:right-4 sm:bottom-4">
+    <div class="mini-player p-2 flex items-center justify-between gap-3 cursor-pointer hover:bg-[#282828] transition-colors" id="miniExpandBtn">
+      <div class="flex items-center gap-3 flex-1 min-w-0">
+        <img id="miniCover" alt="Mini cover" class="h-12 w-12 rounded-md object-cover bg-zinc-900" />
+        <div class="min-w-0 flex-1">
+          <div id="miniTitle" class="font-semibold text-sm truncate text-white">Song title</div>
+          <div id="miniArtist" class="text-xs text-zinc-400 truncate">Artist</div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 pr-2">
+        <button id="miniPlayPauseBtn" class="text-white p-2 hover:scale-105 transition-transform" onclick="event.stopPropagation(); togglePlay();">
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="playerOverlay" class="fixed inset-0 z-50 hidden player-overlay overflow-hidden touch-none">
+    <div id="playerUIContainer" class="h-full w-full flex flex-col px-5 py-6">
+
+      <div class="flex items-center justify-between mb-6">
+        <button id="minimizeBtn" class="p-2 text-white/70 hover:text-white transition">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path fill-rule="evenodd" d="M12.53 16.28a.75.75 0 01-1.06 0l-7.5-7.5a.75.75 0 011.06-1.06L12 14.69l6.97-6.97a.75.75 0 111.06 1.06l-7.5 7.5z" clip-rule="evenodd" /></svg>
+        </button>
+        <div class="text-center flex-1">
+          <div class="text-[10px] uppercase tracking-widest text-white/70 font-semibold mb-1">Playing from artist</div>
+          <div id="playerArtistName" class="font-bold text-xs truncate max-w-[200px] mx-auto">Artist</div>
+        </div>
+        <button class="p-2 text-white/70 hover:text-white transition">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path fill-rule="evenodd" d="M10.5 6a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zm0 6a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zm0 6a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0z" clip-rule="evenodd" /></svg>
+        </button>
+      </div>
+
+      <div class="flex-1 flex flex-col justify-center max-w-md w-full mx-auto pb-4">
+
+        <div class="mb-8 w-full aspect-square rounded-lg shadow-2xl overflow-hidden bg-zinc-900 mx-auto max-h-[400px] max-w-[400px]">
+          <img id="playerCover" alt="Cover art" class="w-full h-full object-cover" />
+        </div>
+
+        <div class="flex items-center justify-between mb-6">
+          <div class="min-w-0 pr-4">
+            <h2 id="playerTitle" class="text-2xl font-bold truncate text-white">Song title</h2>
+            <p id="playerArtists" class="text-lg text-white/70 truncate mt-1">Artist</p>
+          </div>
+        </div>
+
+        <div class="mb-6 range-container">
+          <input id="progressRange" type="range" min="0" max="100" value="0" class="range" />
+          <div class="flex justify-between text-[11px] text-white/60 font-medium mt-2">
+            <span id="currentTime">0:00</span>
+            <span id="totalTime">0:00</span>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between">
+          <div class="w-8"></div>
+
+          <button id="prevBtn" class="text-white p-2 hover:scale-105 transition-transform">
+            <svg viewBox="0 0 24 24" fill="currentColor" class="w-10 h-10"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+          </button>
+
+          <button id="playPauseBtn" class="bg-white text-black h-16 w-16 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
+          </button>
+
+          <button id="nextBtn" class="text-white p-2 hover:scale-105 transition-transform">
+            <svg viewBox="0 0 24 24" fill="currentColor" class="w-10 h-10"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+          </button>
+
+          <div class="w-8"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const supabase = createClient(
+      "https://vixrjkcyrlbwxgegihcm.supabase.co",
+      "sb_publishable_k4gygyuumSWF1k50bYxzlA_ns1iY3lQ"
+    );
+
+    const iconPlayFull = `<svg viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8 ml-1"><path d="M8 5v14l11-7z"/></svg>`;
+    const iconPauseFull = `<svg viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
+
+    const iconPlayMini = `<svg viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7"><path d="M8 5v14l11-7z"/></svg>`;
+    const iconPauseMini = `<svg viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
+
+    const loadingState = document.getElementById("loadingState");
+    const errorState = document.getElementById("errorState");
+    const emptyState = document.getElementById("emptyState");
+    const profileCard = document.getElementById("profileCard");
+
+    const artistName = document.getElementById("artistName");
+    const artistTag = document.getElementById("artistTag");
+    const avatar = document.getElementById("avatar");
+    const avatarFallback = document.getElementById("avatarFallback");
+    const songsList = document.getElementById("songsList");
+
+    const miniPlayer = document.getElementById("miniPlayer");
+    const miniExpandBtn = document.getElementById("miniExpandBtn");
+    const miniPlayPauseBtn = document.getElementById("miniPlayPauseBtn");
+    const miniCover = document.getElementById("miniCover");
+    const miniTitle = document.getElementById("miniTitle");
+    const miniArtist = document.getElementById("miniArtist");
+
+    const playerOverlay = document.getElementById("playerOverlay");
+    const playerUIContainer = document.getElementById("playerUIContainer");
+    const minimizeBtn = document.getElementById("minimizeBtn");
+    const playerArtistName = document.getElementById("playerArtistName");
+    const playerCover = document.getElementById("playerCover");
+    const playerTitle = document.getElementById("playerTitle");
+    const playerArtists = document.getElementById("playerArtists");
+    const progressRange = document.getElementById("progressRange");
+    const currentTimeEl = document.getElementById("currentTime");
+    const totalTimeEl = document.getElementById("totalTime");
+
+    const playPauseBtn = document.getElementById("playPauseBtn");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+
+    const audio = new Audio();
+    audio.preload = "metadata";
+
+    let currentSongs = [];
+    let currentIndex = -1;
+    let isSeeking = false;
+    let playerState = "hidden";
+
+    let touchStartY = 0;
+    let touchCurrentY = 0;
+
+    function escapeHtml(str) {
+      return String(str ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function initials(name) {
+      const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+      if (!parts.length) return "M";
+      return parts.slice(0, 2).map(p => p[0]?.toUpperCase() || "").join("");
+    }
+
+    function getUserIdFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("id") || params.get("userId") || "";
+    }
+
+    function formatTime(seconds) {
+      if (!isFinite(seconds) || seconds < 0) return "0:00";
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return `${m}:${String(s).padStart(2, "0")}`;
+    }
+
+    function songRow(item, index) {
+      const cover = item.image_url || "";
+      const title = item.title || "Untitled song";
+
+      return `
+        <button
+          type="button"
+          data-index="${index}"
+          class="song-row w-full flex items-center gap-4 rounded-md hover:bg-white/10 p-2 transition-colors text-left group"
+        >
+          <div class="h-12 w-12 rounded object-cover bg-zinc-800 flex-shrink-0 relative overflow-hidden">
+            ${cover ? `<img src="${escapeHtml(cover)}" class="h-full w-full object-cover" loading="lazy" />` : ''}
+            <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <svg viewBox="0 0 24 24" fill="white" class="w-6 h-6"><path d="M8 5v14l11-7z"/></svg>
+            </div>
+          </div>
+          <div class="min-w-0 flex-1">
+            <h4 class="text-base font-medium text-white truncate">${escapeHtml(title)}</h4>
+            <div class="flex items-center gap-2 mt-0.5">
+               <p class="text-sm text-zinc-400 truncate group-hover:text-white transition-colors">${escapeHtml(artistName.textContent)}</p>
+            </div>
+          </div>
+          <div class="text-zinc-400 pr-2 hidden sm:block">
+            <svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" /></svg>
+          </div>
+        </button>
+      `;
+    }
+
+    function setPlayerState(state) {
+      playerState = state;
+
+      if (state === "hidden") {
+        playerOverlay.classList.add("hidden");
+        miniPlayer.classList.add("hidden");
+        document.body.style.overflow = "";
+      } else if (state === "full") {
+        playerOverlay.classList.remove("hidden");
+        miniPlayer.classList.add("hidden");
+        document.body.style.overflow = "hidden";
+        playerUIContainer.style.transform = 'translateY(0)';
+      } else if (state === "mini") {
+        playerOverlay.classList.add("hidden");
+        miniPlayer.classList.remove("hidden");
+        document.body.style.overflow = "";
+      }
+    }
+
+    function syncPlayerUI(song) {
+      const artist = song.full_name || artistName.textContent || "Artist";
+      const title = song.title || "Untitled song";
+      const cover = song.image_url || song.avatar_url || "";
+
+      playerArtistName.textContent = artist;
+      playerTitle.textContent = title;
+      playerArtists.textContent = artist;
+      playerCover.src = cover || "";
+
+      miniCover.src = cover || "";
+      miniTitle.textContent = title;
+      miniArtist.textContent = artist;
+    }
+
+    function loadSong(index, autoplay = true) {
+      if (!currentSongs.length) return;
+      if (index < 0 || index >= currentSongs.length) return;
+
+      currentIndex = index;
+      const song = currentSongs[index];
+      syncPlayerUI(song);
+
+      if (song.music_url && audio.dataset.currentUrl !== song.music_url) {
+        audio.src = song.music_url;
+        audio.dataset.currentUrl = song.music_url;
+      }
+
+      if (autoplay) {
+        audio.play().catch(() => {});
+      }
+      updatePlayButtons();
+    }
+
+    function openPlayer(index) {
+      loadSong(index, true);
+      setPlayerState("full");
+    }
+
+    function minimizePlayer() {
+      if (currentIndex < 0) return;
+      setPlayerState("mini");
+    }
+
+    function updatePlayButtons() {
+      playPauseBtn.innerHTML = audio.paused ? iconPlayFull : iconPauseFull;
+      miniPlayPauseBtn.innerHTML = audio.paused ? iconPlayMini : iconPauseMini;
+    }
+
+    window.togglePlay = function() {
+      if (audio.paused) {
+        audio.play().catch(() => {});
+      } else {
+        audio.pause();
+      }
+      updatePlayButtons();
+    }
+
+    function playNext() {
+      if (!currentSongs.length) return;
+      const nextIndex = (currentIndex + 1) % currentSongs.length;
+      loadSong(nextIndex, true);
+    }
+
+    function playPrev() {
+      if (!currentSongs.length) return;
+      const prevIndex = (currentIndex - 1 + currentSongs.length) % currentSongs.length;
+      loadSong(prevIndex, true);
+    }
+
+    audio.addEventListener("timeupdate", () => {
+      if (!isSeeking) {
+        const duration = audio.duration || 0;
+        const percent = duration ? (audio.currentTime / duration) * 100 : 0;
+        progressRange.value = String(percent);
+        progressRange.style.setProperty('--progress', `${percent}%`);
+      }
+      currentTimeEl.textContent = formatTime(audio.currentTime);
+    });
+
+    audio.addEventListener("loadedmetadata", () => {
+      totalTimeEl.textContent = formatTime(audio.duration);
+      currentTimeEl.textContent = formatTime(0);
+      progressRange.value = "0";
+      progressRange.style.setProperty('--progress', `0%`);
+    });
+
+    audio.addEventListener("ended", playNext);
+    audio.addEventListener("play", updatePlayButtons);
+    audio.addEventListener("pause", updatePlayButtons);
+
+    progressRange.addEventListener("input", () => {
+      isSeeking = true;
+      const duration = audio.duration || 0;
+      const pct = Number(progressRange.value) / 100;
+      currentTimeEl.textContent = formatTime(duration * pct);
+      progressRange.style.setProperty('--progress', `${progressRange.value}%`);
+    });
+
+    progressRange.addEventListener("change", () => {
+      const duration = audio.duration || 0;
+      audio.currentTime = duration * (Number(progressRange.value) / 100);
+      isSeeking = false;
+    });
+
+    function renderProfile(profile, songs) {
+      const name = profile?.full_name || songs[0]?.full_name || "Artist";
+      const image = profile?.avatar_url || songs[0]?.avatar_url || "";
+      const count = songs.length;
+
+      document.title = `${name} | Artist Profile`;
+      artistName.textContent = name;
+      artistTag.textContent = `${count} accepted track${count === 1 ? "" : "s"}`;
+
+      if (image) {
+        avatar.src = image;
+        avatar.classList.remove("hidden");
+        avatarFallback.classList.add("hidden");
+      } else {
+        avatar.classList.add("hidden");
+        avatarFallback.textContent = initials(name);
+        avatarFallback.classList.remove("hidden");
+        avatarFallback.classList.add("flex");
+      }
+
+      songsList.innerHTML = songs.map((item, index) => songRow(item, index)).join("");
+      profileCard.classList.remove("hidden");
+    }
+
+    async function loadArtist() {
+      const userId = getUserIdFromUrl();
+
+      if (!userId) {
+        loadingState.classList.add("hidden");
+        errorState.textContent = "No artist ID found in the URL.";
+        errorState.classList.remove("hidden");
+        return;
+      }
+
+      const [{ data: profileData, error: profileError }, { data: songsData, error: songsError }] = await Promise.all([
+        supabase.from("profiles").select("full_name, avatar_url").eq("id", userId).maybeSingle(),
+        supabase.rpc("get_accepted_music_submissions_by_user", { p_user_id: userId })
+      ]);
+
+      loadingState.classList.add("hidden");
+
+      if (profileError && songsError) {
+        errorState.textContent = "Failed to load artist profile.";
+        errorState.classList.remove("hidden");
+        return;
+      }
+
+      const songs = Array.isArray(songsData) ? songsData : [];
+      currentSongs = songs;
+
+      const name = profileData?.full_name || songs[0]?.full_name || "Unknown Artist";
+      const image = profileData?.avatar_url || songs[0]?.avatar_url || "";
+
+      renderProfile({ full_name: name, avatar_url: image }, songs);
+
+      if (!songs.length) {
+        emptyState.classList.remove("hidden");
+      }
+
+      updatePlayButtons();
+    }
+
+    songsList.addEventListener("click", (e) => {
+      const btn = e.target.closest(".song-row");
+      if (!btn) return;
+      const index = Number(btn.dataset.index);
+      if (Number.isFinite(index)) openPlayer(index);
+    });
+
+    playerOverlay.addEventListener('touchstart', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      touchStartY = e.touches[0].clientY;
+      touchCurrentY = touchStartY;
+      playerUIContainer.style.transition = 'none';
+    }, { passive: true });
+
+    playerOverlay.addEventListener('touchmove', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      touchCurrentY = e.touches[0].clientY;
+      const diff = touchCurrentY - touchStartY;
+      if (diff > 0) {
+        playerUIContainer.style.transform = `translateY(${diff}px)`;
+      }
+    }, { passive: true });
+
+    playerOverlay.addEventListener('touchend', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      const diff = touchCurrentY - touchStartY;
+      playerUIContainer.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)';
+
+      if (diff > 120) {
+        playerUIContainer.style.transform = `translateY(100%)`;
+        setTimeout(() => minimizePlayer(), 200);
+      } else {
+        playerUIContainer.style.transform = 'translateY(0)';
+      }
+    });
+
+    minimizeBtn.addEventListener("click", minimizePlayer);
+    miniExpandBtn.addEventListener("click", () => setPlayerState("full"));
+    miniPlayPauseBtn.addEventListener("click", togglePlay);
+    playPauseBtn.addEventListener("click", togglePlay);
+    nextBtn.addEventListener("click", playNext);
+    prevBtn.addEventListener("click", playPrev);
+
+    window.addEventListener("DOMContentLoaded", loadArtist);
+  </script>
+</body>
+</html>
