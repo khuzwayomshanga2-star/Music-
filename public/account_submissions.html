@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Submission Creator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { color-scheme: dark; }
+  </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-6">
+  <div class="w-full max-w-3xl">
+    <h1 class="text-3xl font-bold mb-6">Submission Creator</h1>
+
+    <p id="status" class="text-slate-300 mb-4">Loading...</p>
+
+    <div id="createCard" class="hidden bg-slate-800 rounded-xl p-5 space-y-5">
+      <div>
+        <label class="block text-sm text-slate-300 mb-2">Birth name</label>
+        <input
+          id="birthName"
+          type="text"
+          class="w-full rounded-lg bg-slate-950/60 border border-slate-700 px-4 py-3 outline-none focus:border-emerald-500"
+          placeholder="Enter birth/legal name"
+        />
+      </div>
+
+      <div>
+        <label class="block text-sm text-slate-300 mb-2">Artist name</label>
+        <input
+          id="artistName"
+          type="text"
+          class="w-full rounded-lg bg-slate-950/60 border border-slate-700 px-4 py-3 outline-none focus:border-emerald-500"
+          placeholder="Enter artist/stage name"
+        />
+      </div>
+
+      <button
+        id="createBtn"
+        class="w-full rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 transition"
+      >
+        Create submission
+      </button>
+    </div>
+
+    <div id="uploadCard" class="hidden bg-slate-800 rounded-xl p-5 space-y-5">
+      <div class="rounded-lg border border-slate-700 bg-slate-950/40 p-4">
+        <p class="text-slate-400 mb-2">Raw data</p>
+        <pre id="rawData" class="whitespace-pre-wrap break-words text-sm overflow-auto max-h-[20rem]"></pre>
+      </div>
+
+      <div>
+        <label class="block text-sm text-slate-300 mb-2">Picture</label>
+        <input
+          id="fileInput"
+          type="file"
+          accept="image/*"
+          class="w-full rounded-lg bg-slate-950/60 border border-slate-700 px-4 py-3"
+        />
+      </div>
+
+      <div class="rounded-lg border border-slate-700 bg-slate-950/40 p-4">
+        <p class="text-slate-400 mb-2">Upload status</p>
+        <pre id="uploadData" class="whitespace-pre-wrap break-words text-sm overflow-auto max-h-[20rem]"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const supabase = createClient(
+      "https://vixrjkcyrlbwxgegihcm.supabase.co",
+      "sb_publishable_k4gygyuumSWF1k50bYxzlA_ns1iY3lQ"
+    );
+
+    const statusEl = document.getElementById("status");
+    const createCard = document.getElementById("createCard");
+    const uploadCard = document.getElementById("uploadCard");
+    const rawDataEl = document.getElementById("rawData");
+    const uploadDataEl = document.getElementById("uploadData");
+    const birthNameEl = document.getElementById("birthName");
+    const artistNameEl = document.getElementById("artistName");
+    const fileInputEl = document.getElementById("fileInput");
+    const createBtn = document.getElementById("createBtn");
+
+    let currentSubmissionId = null;
+    let currentUser = null;
+
+    function pretty(value) {
+      return JSON.stringify(value, null, 2);
+    }
+
+    async function getSessionUser() {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) throw new Error(sessionError.message);
+
+      const user = sessionData.session?.user || null;
+      if (!user) throw new Error("Please sign in.");
+
+      return user;
+    }
+
+    async function createSubmissionRow(birthName, artistName) {
+      const { data, error } = await supabase.rpc("create_submission_row", {
+        p_birth_name: birthName,
+        p_artist_name: artistName
+      });
+
+      if (error) throw new Error(error.message);
+      return data;
+    }
+
+    async function uploadPicture(file, userId, submissionId) {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("userId", userId);
+      formData.append("submissionId", submissionId);
+
+      const response = await fetch("/api/upload-artist-image", {
+        method: "POST",
+        body: formData,
+      });
+
+      let result = null;
+      try {
+        result = await response.json();
+      } catch {
+        throw new Error("Invalid server response.");
+      }
+
+      if (!response.ok) {
+        throw new Error(result?.error || "Upload failed.");
+      }
+
+      return result;
+    }
+
+    async function handleCreateSubmission() {
+      try {
+        createBtn.disabled = true;
+        statusEl.textContent = "Checking session...";
+
+        currentUser = await getSessionUser();
+
+        const birthName = birthNameEl.value.trim();
+        const artistName = artistNameEl.value.trim();
+
+        if (!birthName) throw new Error("Enter birth name.");
+        if (!artistName) throw new Error("Enter artist name.");
+
+        statusEl.textContent = "Creating submission...";
+        const submissionId = await createSubmissionRow(birthName, artistName);
+
+        currentSubmissionId = submissionId;
+        rawDataEl.textContent = pretty({
+          submission_id: submissionId,
+          user_id: currentUser.id,
+          birth_name: birthName,
+          artist_name: artistName
+        });
+
+        createCard.classList.add("hidden");
+        uploadCard.classList.remove("hidden");
+        statusEl.textContent = "Submission created. Choose a picture to upload.";
+      } catch (err) {
+        statusEl.textContent = err?.message || "Something went wrong.";
+      } finally {
+        createBtn.disabled = false;
+      }
+    }
+
+    async function handleFileChosen() {
+      try {
+        const file = fileInputEl.files[0];
+        if (!file) return;
+
+        if (!currentUser) {
+          throw new Error("Please sign in.");
+        }
+
+        if (!currentSubmissionId) {
+          throw new Error("No submission id found.");
+        }
+
+        uploadDataEl.textContent = "Uploading...";
+
+        const uploadResult = await uploadPicture(file, currentUser.id, currentSubmissionId);
+
+        uploadDataEl.textContent = pretty(uploadResult);
+        statusEl.textContent = "Picture uploaded successfully.";
+      } catch (err) {
+        uploadDataEl.textContent = "";
+        statusEl.textContent = err?.message || "Upload failed.";
+      } finally {
+        fileInputEl.value = "";
+      }
+    }
+
+    createBtn.addEventListener("click", handleCreateSubmission);
+    fileInputEl.addEventListener("change", handleFileChosen);
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      try {
+        currentUser = await getSessionUser();
+        statusEl.textContent = `Signed in as ${currentUser.email || currentUser.id}`;
+        createCard.classList.remove("hidden");
+      } catch (err) {
+        statusEl.textContent = err?.message || "Please sign in.";
+      }
+    });
+  </script>
+</body>
+</html>
