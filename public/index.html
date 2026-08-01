@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Google Sign In</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-900 flex items-center justify-center min-h-screen p-4 text-white">
+  <div class="w-full max-w-md text-center">
+    <button
+      id="googleBtn"
+      class="w-full flex items-center justify-center gap-3 bg-white text-slate-900 font-bold py-3 px-6 rounded-xl hover:bg-slate-100 transition cursor-pointer shadow-md"
+    >
+      Continue with Google
+    </button>
+
+    <p id="status" class="mt-4 text-slate-300 text-sm">Checking account...</p>
+  </div>
+
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const supabase = createClient(
+      "https://vixrjkcyrlbwxgegihcm.supabase.co",
+      "sb_publishable_k4gygyuumSWF1k50bYxzlA_ns1iY3lQ"
+    );
+
+    const googleBtn = document.getElementById("googleBtn");
+    const statusEl = document.getElementById("status");
+
+    function routeUser(flags) {
+      const fullName = Boolean(flags?.full_name);
+      const verification = Boolean(flags?.verification);
+      const submission = Boolean(flags?.submission);
+
+      if (fullName && verification) {
+        window.location.replace("my_profile.html");
+        return;
+      }
+
+      if (fullName && !verification) {
+        window.location.replace("show_users.html");
+        return;
+      }
+
+      if (!fullName && submission) {
+        window.location.replace("acception.html");
+        return;
+      }
+
+      if (!fullName && !verification && !submission) {
+        window.location.replace("confirmation.html");
+        return;
+      }
+
+      window.location.replace("confirmation.html");
+    }
+
+    async function checkProfileFlagsAndRoute() {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        statusEl.textContent = sessionError.message;
+        return;
+      }
+
+      if (!session?.user) {
+        statusEl.textContent = "Please sign in.";
+        return;
+      }
+
+      statusEl.textContent = "Loading profile...";
+
+      const { data, error } = await supabase.rpc("get_my_profile_flags");
+
+      if (error) {
+        statusEl.textContent = error.message;
+        return;
+      }
+
+      const flags = Array.isArray(data) ? data[0] : data;
+      routeUser(flags || {});
+    }
+
+    supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        await checkProfileFlagsAndRoute();
+      }
+    });
+
+    googleBtn.addEventListener("click", async () => {
+      statusEl.textContent = "Signing in...";
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin + window.location.pathname
+        }
+      });
+
+      if (error) {
+        statusEl.textContent = "OAuth error.";
+        alert("OAuth error:\n" + JSON.stringify(error, null, 2));
+      }
+    });
+
+    window.addEventListener("DOMContentLoaded", checkProfileFlagsAndRoute);
+  </script>
+</body>
+</html>
