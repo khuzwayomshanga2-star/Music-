@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Submission Creator</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/cropperjs@1.5.13/dist/cropper.min.css" rel="stylesheet" />
+
+  <style>
+    :root { color-scheme: dark; }
+
+    .glass {
+      background: rgba(15, 23, 42, 0.72);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+
+    .soft-border {
+      border: 1px solid rgba(148, 163, 184, 0.14);
+    }
+
+    .preview-shell {
+      position: relative;
+      overflow: hidden;
+      border-radius: 1rem;
+      min-height: 240px;
+      background: rgba(2, 6, 23, 0.75);
+      border: 1px solid rgba(51, 65, 85, 0.9);
+    }
+
+    .preview-loading-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 0.75rem;
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.78), rgba(30, 41, 59, 0.72));
+      z-index: 20;
+      transition: opacity 0.25s ease, visibility 0.25s ease;
+    }
+
+    .preview-loading-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .spinner {
+      width: 42px;
+      height: 42px;
+      border-radius: 9999px;
+      border: 4px solid rgba(148, 163, 184, 0.28);
+      border-top-color: #22c55e;
+      animation: spin 0.9s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .shimmer {
+      width: min(240px, 80%);
+      height: 10px;
+      border-radius: 9999px;
+      background: linear-gradient(90deg, rgba(71, 85, 105, 0.3), rgba(148, 163, 184, 0.65), rgba(71, 85, 105, 0.3));
+      background-size: 200% 100%;
+      animation: shimmer 1.2s ease-in-out infinite;
+    }
+
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    .preview-image {
+      width: 100%;
+      display: block;
+      transition: filter 0.25s ease, transform 0.25s ease, opacity 0.25s ease;
+    }
+
+    .preview-image.loading {
+      filter: blur(18px);
+      transform: scale(1.06);
+      opacity: 0.82;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-6">
+  <div class="w-full max-w-3xl">
+    <h1 class="text-3xl font-bold mb-6">Submission Creator</h1>
+
+    <p id="status" class="text-slate-300 mb-4">Loading...</p>
+
+    <div id="createCard" class="hidden bg-slate-800 rounded-xl p-5 space-y-5">
+      <div>
+        <label class="block text-sm text-slate-300 mb-2">Birth name</label>
+        <input
+          id="birthName"
+          type="text"
+          class="w-full rounded-lg bg-slate-950/60 border border-slate-700 px-4 py-3 outline-none focus:border-emerald-500"
+          placeholder="Enter birth/legal name"
+        />
+      </div>
+
+      <div>
+        <label class="block text-sm text-slate-300 mb-2">Artist name</label>
+        <input
+          id="artistName"
+          type="text"
+          class="w-full rounded-lg bg-slate-950/60 border border-slate-700 px-4 py-3 outline-none focus:border-emerald-500"
+          placeholder="Enter artist/stage name"
+        />
+      </div>
+
+      <div>
+        <label class="block text-sm text-slate-300 mb-2">Number</label>
+        <input
+          id="numberValue"
+          type="text"
+          class="w-full rounded-lg bg-slate-950/60 border border-slate-700 px-4 py-3 outline-none focus:border-emerald-500"
+          placeholder="Enter number"
+        />
+      </div>
+
+      <button
+        id="createBtn"
+        class="w-full rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 transition"
+      >
+        Create submission
+      </button>
+    </div>
+
+    <div id="uploadCard" class="hidden bg-slate-800 rounded-xl p-5 space-y-5">
+      <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <div class="text-xs uppercase tracking-[0.2em] text-slate-400">Submission ready</div>
+          <div id="submissionState" class="mt-2 text-lg font-bold text-white">Upload your picture</div>
+          <div class="mt-1 text-sm text-slate-300">Choose an image, crop it, then upload the edited version.</div>
+        </div>
+
+        <button
+          id="exploreBtn"
+          class="hidden rounded-xl bg-white text-slate-950 font-bold px-5 py-3 transition hover:bg-slate-100"
+        >
+          Explore the app
+        </button>
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold mb-2 text-slate-200">Select image</label>
+        <input
+          id="fileInput"
+          type="file"
+          accept="image/*"
+          class="w-full rounded-2xl bg-slate-950 border border-slate-700 px-4 py-3"
+        />
+      </div>
+
+      <div id="previewContainer" class="hidden preview-shell">
+        <div id="previewLoadingOverlay" class="preview-loading-overlay hidden">
+          <div class="spinner"></div>
+          <div class="text-sm text-slate-200 font-semibold">Loading preview</div>
+          <div class="shimmer"></div>
+        </div>
+        <img id="imagePreview" src="" crossorigin="anonymous" class="preview-image" alt="Preview" />
+      </div>
+
+      <div id="cropControls" class="hidden text-center">
+        <div class="flex flex-wrap gap-2 justify-center mb-3">
+          <button id="rotateLeft" class="rounded-2xl bg-slate-700 hover:bg-slate-600 transition px-4 py-2">⟲</button>
+          <button id="rotateRight" class="rounded-2xl bg-slate-700 hover:bg-slate-600 transition px-4 py-2">⟳</button>
+          <button id="applyCrop" class="rounded-2xl bg-violet-600 hover:bg-violet-700 transition px-4 py-2 font-bold">Apply Crop</button>
+          <button id="discardBtn" class="rounded-2xl bg-red-600 hover:bg-red-700 transition px-4 py-2 font-bold">Clear</button>
+        </div>
+
+        <div class="flex flex-wrap gap-2 justify-center">
+          <button data-ratio="free" class="rounded-2xl bg-slate-700 hover:bg-slate-600 transition px-4 py-2">Free</button>
+          <button data-ratio="1" class="rounded-2xl bg-slate-700 hover:bg-slate-600 transition px-4 py-2">1:1</button>
+          <button data-ratio="1.777" class="rounded-2xl bg-slate-700 hover:bg-slate-600 transition px-4 py-2">16:9</button>
+          <button data-ratio="0.8" class="rounded-2xl bg-slate-700 hover:bg-slate-600 transition px-4 py-2">4:5</button>
+        </div>
+      </div>
+
+      <button
+        id="uploadBtn"
+        class="hidden w-full rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 transition"
+      >
+        Upload Edited Image
+      </button>
+
+      <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <div class="text-xs uppercase tracking-[0.2em] text-slate-400">Saved picture preview</div>
+          <button
+            id="editSavedBtn"
+            class="hidden rounded-lg bg-white/10 hover:bg-white/15 px-3 py-2 text-sm font-semibold text-white transition"
+          >
+            Edit saved picture
+          </button>
+        </div>
+
+        <div class="mt-3 hidden preview-shell" id="savedPreviewShell">
+          <img id="savedPreview" src="" alt="Saved preview" class="preview-image cursor-pointer" />
+        </div>
+
+        <div id="savedPreviewEmpty" class="mt-2 text-sm text-slate-400">
+          Your uploaded picture will appear here.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.5.13/dist/cropper.min.js"></script>
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const supabase = createClient(
+      "https://vixrjkcyrlbwxgegihcm.supabase.co",
+      "sb_publishable_k4gygyuumSWF1k50bYxzlA_ns1iY3lQ"
+    );
+
+    const statusEl = document.getElementById("status");
+    const createCard = document.getElementById("createCard");
+    const uploadCard = document.getElementById("uploadCard");
+    const submissionState = document.getElementById("submissionState");
+    const birthNameEl = document.getElementById("birthName");
+    const artistNameEl = document.getElementById("artistName");
+    const numberValueEl = document.getElementById("numberValue");
+    const fileInputEl = document.getElementById("fileInput");
+    const createBtn = document.getElementById("createBtn");
+    const uploadBtn = document.getElementById("uploadBtn");
+    const exploreBtn = document.getElementById("exploreBtn");
+
+    const previewContainer = document.getElementById("previewContainer");
+    const previewLoadingOverlay = document.getElementById("previewLoadingOverlay");
+    const imagePreviewEl = document.getElementById("imagePreview");
+    const cropControls = document.getElementById("cropControls");
+    const rotateLeft = document.getElementById("rotateLeft");
+    const rotateRight = document.getElementById("rotateRight");
+    const applyCrop = document.getElementById("applyCrop");
+    const discardBtn = document.getElementById("discardBtn");
+
+    const savedPreviewShell = document.getElementById("savedPreviewShell");
+    const savedPreview = document.getElementById("savedPreview");
+    const savedPreviewEmpty = document.getElementById("savedPreviewEmpty");
+    const editSavedBtn = document.getElementById("editSavedBtn");
+
+    let currentSubmissionId = null;
+    let currentUser = null;
+    let originalFile = null;
+    let finalImageBlob = null;
+    let cropper = null;
+    let currentPreviewObjectUrl = null;
+
+    function showStatus(message, type = "info") {
+      statusEl.className =
+        "mb-4 " +
+        (type === "success"
+          ? "text-emerald-300"
+          : type === "error"
+          ? "text-red-300"
+          : "text-slate-300");
+      statusEl.textContent = message;
+    }
+
+    async function getSessionUser() {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error(sessionError.message);
+
+      const user = sessionData.session?.user || null;
+      if (!user) throw new Error("Please sign in.");
+
+      return user;
+    }
+
+    async function createSubmissionRow(birthName, artistName, numberValue) {
+      const { data, error } = await supabase.rpc("create_submission_row", {
+        p_birth_name: birthName,
+        p_artist_name: artistName,
+        p_number: numberValue
+      });
+
+      if (error) throw new Error(error.message);
+      return data;
+    }
+
+    async function uploadPicture(file, userId, submissionId) {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("userId", userId);
+      formData.append("submissionId", submissionId);
+
+      const response = await fetch("/api/upload-artist-image", {
+        method: "POST",
+        body: formData,
+      });
+
+      let result = null;
+      try {
+        result = await response.json();
+      } catch {
+        throw new Error("Invalid server response.");
+      }
+
+      if (!response.ok) {
+        throw new Error(result?.error || "Upload failed.");
+      }
+
+      return result;
+    }
+
+    async function getMySubmissionPicture() {
+      const { data, error } = await supabase.rpc("get_my_submission_picture");
+      if (error) throw new Error(error.message);
+      return data;
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    function loadImageOnce(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => resolve(src);
+        img.onerror = () => reject(new Error("Image load failed"));
+        img.src = src;
+      });
+    }
+
+    async function loadImageWithRetry(url) {
+      const cleanBase = String(url || "").split("#")[0].split("?")[0];
+      const candidates = [
+        `${cleanBase}?v=${Date.now()}`,
+        `${cleanBase}?cache=${Date.now()}`,
+        cleanBase
+      ];
+
+      let lastError = null;
+
+      for (const candidate of candidates) {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            return await loadImageOnce(candidate);
+          } catch (err) {
+            lastError = err;
+            await sleep(300 * (attempt + 1));
+          }
+        }
+      }
+
+      try {
+        const response = await fetch(cleanBase, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        currentPreviewObjectUrl = objectUrl;
+        await loadImageOnce(objectUrl);
+        return objectUrl;
+      } catch (err) {
+        lastError = err;
+      }
+
+      throw lastError || new Error("Unable to load image");
+    }
+
+    function showPreviewLoading() {
+      previewContainer.classList.remove("hidden");
+      previewLoadingOverlay.classList.remove("hidden");
+      imagePreviewEl.classList.add("loading");
+      imagePreviewEl.style.visibility = "hidden";
+    }
+
+    function hidePreviewLoading() {
+      previewLoadingOverlay.classList.add("hidden");
+      imagePreviewEl.classList.remove("loading");
+      imagePreviewEl.style.visibility = "visible";
+    }
+
+    async function renderPreviewImage(sourceUrl) {
+      if (!sourceUrl) throw new Error("Missing image URL");
+
+      if (cropper) {
+        cropper.destroy();
+        cropper = null;
+      }
+
+      if (currentPreviewObjectUrl) {
+        URL.revokeObjectURL(currentPreviewObjectUrl);
+        currentPreviewObjectUrl = null;
+      }
+
+      showPreviewLoading();
+
+      try {
+        const resolved = await loadImageWithRetry(sourceUrl);
+
+        imagePreviewEl.onload = () => {
+          if (cropper) cropper.destroy();
+          cropper = new Cropper(imagePreviewEl, {
+            aspectRatio: NaN,
+            viewMode: 1,
+            dragMode: "move",
+            autoCropArea: 1,
+            responsive: true,
+            checkCrossOrigin: false,
+            background: false
+          });
+
+          imagePreviewEl.onload = null;
+          hidePreviewLoading();
+        };
+
+        imagePreviewEl.onerror = () => {
+          hidePreviewLoading();
+          showStatus("Preview could not be loaded.", "error");
+        };
+
+        imagePreviewEl.src = resolved;
+        cropControls.classList.remove("hidden");
+      } catch (err) {
+        hidePreviewLoading();
+        throw err;
+      }
+    }
+
+    function clearPreview() {
+      originalFile = null;
+      finalImageBlob = null;
+      fileInputEl.value = "";
+      previewContainer.classList.add("hidden");
+      cropControls.classList.add("hidden");
+      uploadBtn.classList.add("hidden");
+
+      if (cropper) {
+        cropper.destroy();
+        cropper = null;
+      }
+
+      if (currentPreviewObjectUrl) {
+        URL.revokeObjectURL(currentPreviewObjectUrl);
+        currentPreviewObjectUrl = null;
+      }
+
+      imagePreviewEl.src = "";
+      hidePreviewLoading();
+    }
+
+    async function refreshSavedPreview() {
+      try {
+        const pictureUrl = await getMySubmissionPicture();
+
+        if (pictureUrl) {
+          savedPreview.src = pictureUrl;
+          savedPreviewShell.classList.remove("hidden");
+          savedPreviewEmpty.classList.add("hidden");
+          editSavedBtn.classList.remove("hidden");
+        } else {
+          savedPreviewShell.classList.add("hidden");
+          savedPreviewEmpty.classList.remove("hidden");
+          editSavedBtn.classList.add("hidden");
+        }
+      } catch (err) {
+        showStatus(err?.message || "Could not load saved picture.", "error");
+      }
+    }
+
+    async function loadSavedForEditing() {
+      try {
+        const pictureUrl = await getMySubmissionPicture();
+        if (!pictureUrl) throw new Error("No saved picture found.");
+
+        originalFile = null;
+        finalImageBlob = null;
+        uploadBtn.classList.remove("hidden");
+
+        showStatus("Loading saved picture for editing...");
+        await renderPreviewImage(pictureUrl);
+        showStatus("Saved picture loaded. Edit it, then upload again.", "success");
+      } catch (err) {
+        showStatus(err?.message || "Could not load saved picture for editing.", "error");
+      }
+    }
+
+    async function handleCreateSubmission() {
+      try {
+        createBtn.disabled = true;
+        showStatus("Checking session...");
+
+        currentUser = await getSessionUser();
+
+        const birthName = birthNameEl.value.trim();
+        const artistName = artistNameEl.value.trim();
+        const numberValue = numberValueEl.value.trim();
+
+        if (!birthName) throw new Error("Enter birth name.");
+        if (!artistName) throw new Error("Enter artist name.");
+        if (!numberValue) throw new Error("Enter number.");
+
+        showStatus("Creating submission...");
+        const submissionId = await createSubmissionRow(birthName, artistName, numberValue);
+
+        currentSubmissionId = submissionId;
+        submissionState.textContent = "Upload your picture";
+
+        createCard.classList.add("hidden");
+        uploadCard.classList.remove("hidden");
+        showStatus("Submission created. Choose a picture to preview and upload.", "success");
+      } catch (err) {
+        showStatus(err?.message || "Something went wrong.", "error");
+      } finally {
+        createBtn.disabled = false;
+      }
+    }
+
+    async function handleFileChosen() {
+      try {
+        const file = fileInputEl.files[0];
+        if (!file) return;
+
+        if (!currentUser) throw new Error("Please sign in.");
+        if (!currentSubmissionId) throw new Error("No submission id found.");
+
+        originalFile = file;
+        finalImageBlob = null;
+        uploadBtn.classList.remove("hidden");
+
+        showStatus("Loading preview...");
+        await renderPreviewImage(URL.createObjectURL(file));
+        showStatus("Preview ready. Edit the image if needed, then upload.", "success");
+      } catch (err) {
+        showStatus(err?.message || "Preview failed.", "error");
+        clearPreview();
+      }
+    }
+
+    async function handleUploadEditedImage() {
+      try {
+        if (!currentUser) throw new Error("Please sign in.");
+        if (!currentSubmissionId) throw new Error("No submission id found.");
+        if (!originalFile && !finalImageBlob) throw new Error("Choose an image first.");
+        if (cropper) throw new Error("Apply the crop before uploading.");
+
+        uploadBtn.disabled = true;
+        showStatus("Uploading picture...");
+
+        const fileToUpload = finalImageBlob
+          ? new File([finalImageBlob], originalFile?.name || "edited_image.jpg", {
+              type: finalImageBlob.type || "image/jpeg"
+            })
+          : originalFile;
+
+        await uploadPicture(fileToUpload, currentUser.id, currentSubmissionId);
+        showStatus("Picture uploaded successfully.", "success");
+
+        clearPreview();
+        await refreshSavedPreview();
+
+        submissionState.textContent = "Picture uploaded.";
+        exploreBtn.classList.remove("hidden");
+      } catch (err) {
+        showStatus(err?.message || "Upload failed.", "error");
+      } finally {
+        uploadBtn.disabled = false;
+      }
+    }
+
+    rotateLeft.onclick = () => cropper && cropper.rotate(-90);
+    rotateRight.onclick = () => cropper && cropper.rotate(90);
+
+    document.querySelectorAll("[data-ratio]").forEach((btn) => {
+      btn.onclick = () => {
+        if (!cropper) return;
+        const ratio = btn.dataset.ratio;
+        cropper.setAspectRatio(ratio === "free" ? NaN : parseFloat(ratio));
+      };
+    });
+
+    applyCrop.onclick = () => {
+      if (!cropper) return;
+
+      const canvas = cropper.getCroppedCanvas({ maxWidth: 1400, maxHeight: 1400 });
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        finalImageBlob = blob;
+        imagePreviewEl.src = canvas.toDataURL("image/jpeg", 0.92);
+        cropper.destroy();
+        cropper = null;
+        cropControls.classList.add("hidden");
+        showStatus("Crop applied. You can upload the final image now.", "success");
+      }, "image/jpeg", 0.92);
+    };
+
+    discardBtn.onclick = () => {
+      clearPreview();
+      showStatus("Image cleared.", "info");
+    };
+
+    editSavedBtn.addEventListener("click", loadSavedForEditing);
+    savedPreview.addEventListener("click", loadSavedForEditing);
+    createBtn.addEventListener("click", handleCreateSubmission);
+    fileInputEl.addEventListener("change", handleFileChosen);
+    uploadBtn.addEventListener("click", handleUploadEditedImage);
+    exploreBtn.addEventListener("click", () => {
+      window.location.href = "show_users.html";
+    });
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      try {
+        currentUser = await getSessionUser();
+        statusEl.textContent = "Ready";
+        createCard.classList.remove("hidden");
+        await refreshSavedPreview();
+      } catch (err) {
+        statusEl.textContent = err?.message || "Please sign in.";
+      }
+    });
+  </script>
+</body>
+        </html>
